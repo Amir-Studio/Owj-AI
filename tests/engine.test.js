@@ -188,3 +188,16 @@ test('assesses malformed, future, duplicate and unstable session records', () =>
   assert.equal(quality.invalidRecords, 1);
   assert.equal(quality.status, 'low');
 });
+
+
+test('serializes concurrent feedback writes without losing events', async () => {
+  const ai = createOwjAI({ clock: () => now });
+  await Promise.all(Array.from({ length: 20 }, (_, index) => ai.recordFeedback({
+    userId: 'u-concurrent', id: 'event-' + index, kind: 'recommendation',
+    recommendationId: 'rec-' + index, accepted: index % 2 === 0
+  })));
+  const summary = await ai.getFeedbackSummary('u-concurrent');
+  assert.equal(summary.totalEvents, 20);
+  assert.equal(summary.recommendationCount, 20);
+  assert.equal(summary.acceptanceRatePercent, 50);
+});
