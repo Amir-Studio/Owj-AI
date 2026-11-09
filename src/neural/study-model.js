@@ -131,6 +131,7 @@ function trainBatch(model, batch, optimizer, options) {
   const norm = Math.sqrt(gradients.reduce((sum, value) => sum + value * value, 0));
   const clip = norm > options.gradientClip ? options.gradientClip / norm : 1;
   let cursor = 0;
+  optimizer.beginStep();
   const apply = (array, shape) => {
     for (let i = 0; i < array.length; i++) {
       if (Array.isArray(array[i])) {
@@ -154,13 +155,13 @@ function createAdam() {
   const moments = new WeakMap();
   let stepCount = 0;
   return {
+    beginStep() { stepCount++; },
     step(array, index, gradient, options) {
       let state = moments.get(array);
       if (!state) {
         state = { m: Array(array.length).fill(0), v: Array(array.length).fill(0) };
         moments.set(array, state);
       }
-      if (index === 0) stepCount++;
       const beta1 = 0.9, beta2 = 0.999;
       state.m[index] = beta1 * state.m[index] + (1 - beta1) * gradient;
       state.v[index] = beta2 * state.v[index] + (1 - beta2) * gradient * gradient;
