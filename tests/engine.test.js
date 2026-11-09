@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  createOwjAI, analyzeData, detectPatterns, rankPriorities, predictStudyTrend
+  createOwjAI, analyzeData, assessDataQuality, detectPatterns, rankPriorities, predictStudyTrend
 } from '../src/index.js';
 
 import { createWeeklyForecast, settleWeeklyForecasts, summarizeForecastAccuracy } from '../src/core/forecast.js';
@@ -150,9 +150,41 @@ test('stores a weekly forecast once and measures it against actual future sessio
     { startedAt: new Date('2026-11-20T08:00:00Z'), actualMinutes: 120 },
     { startedAt: new Date('2026-11-23T08:00:00Z'), actualMinutes: 999 }
   ];
-  const settled = settleWeeklyForecasts(history, sessions, new Date('2026-11-24T00:00:00Z'));
+  const evaluationDate = new Date('2026-11-24T00:00:00Z');
+  assert.equal(settleWeeklyForecasts(history, sessions, evaluationDate)[0].actualMinutes, null);
+  const settled = settleWeeklyForecasts(history, sessions, evaluationDate, evaluationDate);
   assert.equal(settled[0].actualMinutes, 180);
   assert.equal(settled[0].absoluteErrorMinutes, 240);
   assert.equal(summarizeForecastAccuracy(settled).evaluatedForecasts, 1);
   assert.equal(summarizeForecastAccuracy(settled).status, 'collecting');
+});
+
+
+test('trend regression accounts for missing calendar weeks', () => {
+  const data = { overview: { totalMinutes7d: 300, totalMinutesPrevious7d: 250 } };
+  const memory = { snapshots: [
+    { weekKey: '2026-10-05', totalMinutes7d: 100 },
+    { weekKey: '2026-10-19', totalMinutes7d: 200 },
+    { weekKey: '2026-11-02', totalMinutes7d: 300 }
+  ] };
+  const trend = predictStudyTrend(data, memory);
+  assert.equal(trend.method, 'gap_aware_weekly_linear_trend');
+  assert.equal(trend.slopeMinutesPerWeek, 50);
+});
+
+test('assesses malformed, future, duplicate and unstable session records', () => {
+  const quality = assessDataQuality([
+    { id: 's1', subject: 'Math', actualMinutes: 30, startedAt: '2026-11-08T10:00:00Z' },
+    { id: 's1', subject: 'Math', actualMinutes: 30, startedAt: '2026-11-08T10:00:00Z' },
+    { subject: 'Physics', actualMinutes: 20, startedAt: '2026-11-07T10:00:00Z' },
+    { id: 'future', actualMinutes: 20, startedAt: '2026-11-12T10:00:00Z' },
+    { id: 'bad', actualMinutes: -2, startedAt: 'not-a-date' }
+  ], now);
+  assert.equal(quality.totalRecords, 5);
+  assert.equal(quality.usableRecords, 2);
+  assert.equal(quality.duplicateRecords, 1);
+  assert.equal(quality.missingStableIds, 1);
+  assert.equal(quality.futureRecords, 1);
+  assert.equal(quality.invalidRecords, 1);
+  assert.equal(quality.status, 'low');
 });
