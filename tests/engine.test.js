@@ -359,3 +359,25 @@ test('insufficient neural data is not persisted as a trained model', async () =>
   assert.equal(await ai.getMemory('u-neural-small'), null);
   assert.equal((await ai.getNeuralMetrics('u-neural-small')).totalExamples, 0);
 });
+
+
+test('rejects incomplete or out-of-range plan outcome measurements', async () => {
+  const ai = createOwjAI({ clock: () => now });
+  await assert.rejects(() => ai.recordFeedback({
+    userId: 'u-invalid-outcome', kind: 'plan_outcome',
+    plannedMinutes: 60, completed: false, subject: 'Math'
+  }), /actualMinutes/);
+  await assert.rejects(() => ai.recordFeedback({
+    userId: 'u-invalid-outcome', kind: 'plan_outcome',
+    plannedMinutes: 60, actualMinutes: -1, completed: false, subject: 'Math'
+  }), /actualMinutes/);
+  await assert.rejects(() => ai.recordFeedback({
+    userId: 'u-invalid-outcome', kind: 'plan_outcome',
+    plannedMinutes: 60, actualMinutes: 1500, completed: false, subject: 'Math'
+  }), /actualMinutes/);
+  await assert.rejects(() => ai.recordFeedback({
+    userId: 'u-invalid-outcome', kind: 'plan_outcome',
+    plannedMinutes: 1500, actualMinutes: 30, completed: false, subject: 'Math'
+  }), /plannedMinutes/);
+  assert.equal(await ai.getMemory('u-invalid-outcome'), null);
+});
