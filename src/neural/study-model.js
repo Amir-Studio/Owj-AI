@@ -1,53 +1,57 @@
-const FEATURE_KEYS = Object.freeze([
-  'studyMinutes7d', 'studyMinutesPrevious7d', 'activeDays7d', 'sessions7d',
-  'completionRate', 'plannedVsActualPercent', 'assessmentPerformance',
-  'daysUntilNextExam', 'consistencyScore', 'averageSessionMinutes',
-  'subjectsStudied7d', 'missedSessions7d'
+const FEATURE_SPECS = Object.freeze([
+  ['studyMinutes7d', 0, 4200],
+  ['studyMinutesPrevious7d', 0, 4200],
+  ['activeDays7d', 0, 7],
+  ['sessions7d', 0, 70],
+  ['completionRate', 0, 100],
+  ['plannedVsActualPercent', 0, 150],
+  ['assessmentPerformance', 0, 100],
+  ['daysUntilNextExam', 0, 90],
+  ['consistencyScore', 0, 100],
+  ['averageSessionMinutes', 0, 240],
+  ['subjectsStudied7d', 0, 20],
+  ['missedSessions7d', 0, 70]
 ]);
-const SCALES = Object.freeze([4200, 4200, 7, 70, 100, 150, 100, 90, 100, 180, 12, 70]);
+const FEATURE_KEYS = Object.freeze(FEATURE_SPECS.map(([key]) => key));
 const OUTPUT_SCALE = 10080;
-const HIDDEN_SIZE = 16;
+const HIDDEN_SIZE = 20;
 const INPUT_SIZE = FEATURE_KEYS.length * 2;
-const MINIMUM_EXAMPLES = 30;
+const MIN_EXAMPLES = 30;
+const MIN_VALIDATION = 6;
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
-const finite = (v, fallback = NaN) => Number.isFinite(Number(v)) ? Number(v) : fallback;
+const isFiniteNumber = v => typeof v === 'number' && Number.isFinite(v);
 const sigmoid = z => 1 / (1 + Math.exp(-clamp(z, -25, 25)));
 const tanh = z => Math.tanh(clamp(z, -15, 15));
 
 function encode(features = {}) {
-  if (!features || typeof features !== 'object' || Array.isArray(features)) features = {};
-  const values = [], missing = [];
-  for (let i = 0; i < FEATURE_KEYS.length; i++) {
-    const raw = features[FEATURE_KEYS[i]];
+  const values = [];
+  const missing = [];
+  for (const [key, min, max] of FEATURE_SPECS) {
+    const raw = features?.[key];
     const present = raw !== null && raw !== undefined && raw !== '' && Number.isFinite(Number(raw));
-    values.push(present ? clamp(Number(raw) / SCALES[i], 0, 1) : 0);
+    values.push(present ? (clamp(Number(raw), min, max) - min) / (max - min) : 0);
     missing.push(present ? 0 : 1);
   }
   return values.concat(missing);
 }
 
-function validFeatureObject(features) {
+function validFeatures(features) {
   if (!features || typeof features !== 'object' || Array.isArray(features)) return false;
-  for (let i = 0; i < FEATURE_KEYS.length; i++) {
-    const value = features[FEATURE_KEYS[i]];
-    if (value == null || value === '') continue;
-    const number = Number(value);
-    if (!Number.isFinite(number) || number < 0 || number > SCALES[i] * 2) return false;
-  }
-  return true;
+  const present = FEATURE_KEYS.filter(key => features[key] !== null && features[key] !== undefined
+    && features[key] !== '' && Number.isFinite(Number(features[key])));
+  return present.length >= 8;
 }
 
 function validExample(item) {
-  if (!item || typeof item !== 'object' || !validFeatureObject(item.features)) return false;
-  const minutes = Number(item.nextWeekMinutes);
-  const completion = Number(item.nextWeekCompletionRate);
-  return item.nextWeekMinutes != null && item.nextWeekMinutes !== ''
-    && item.nextWeekCompletionRate != null && item.nextWeekCompletionRate !== ''
-    && Number.isFinite(minutes) && minutes >= 0 && minutes <= OUTPUT_SCALE
-    && Number.isFinite(completion) && completion >= 0 && completion <= 100;
+  if (!item || typeof item !== 'object' || !validFeatures(item.features)) return false;
+  if (typeof item.weekStart !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(item.weekStart)) return false;
+  const parsed = Date.parse(item.weekStart);
+  if (!Number.isFinite(parsed) || new Date(parsed).toISOString().slice(0, 10) !== item.weekStart) return false;
+  return isFiniteNumber(item.nextWeekMinutes) && item.nextWeekMinutes >= 0 && item.nextWeekMinutes <= OUTPUT_SCALE
+    && isFiniteNumber(item.nextWeekCompletionRate) && item.nextWeekCompletionRate >= 0 && item.nextWeekCompletionRate <= 100;
 }
 
-function randomGenerator(seed) {
+function randomGenerator(seed = 731) {
   let state = seed >>> 0;
   return () => ((state = (1664525 * state + 1013904223) >>> 0) / 4294967296);
 }
@@ -57,9 +61,13 @@ function initialize(seed = 731) {
   const limit1 = Math.sqrt(6 / (INPUT_SIZE + HIDDEN_SIZE));
   const limit2 = Math.sqrt(6 / (HIDDEN_SIZE + 2));
   return {
-    schemaVersion: 2, featureKeys: [...FEATURE_KEYS], inputSize: INPUT_SIZE,
-    hiddenSize: HIDDEN_SIZE, trainedExamples: 0, trainingExamples: 0,
-    epochs: 0, validation: null,
+    schemaVersion: 3,
+    featureKeys: [...FEATURE_KEYS],
+    inputSize: INPUT_SIZE,
+    hiddenSize: HIDDEN_SIZE,
+    trainedExamples: 0,
+    epochs: 0,
+    validation: null,
     weights1: Array.from({ length: HIDDEN_SIZE }, () => Array.from({ length: INPUT_SIZE }, () => (random() * 2 - 1) * limit1)),
     bias1: Array(HIDDEN_SIZE).fill(0),
     weights2: Array.from({ length: 2 }, () => Array.from({ length: HIDDEN_SIZE }, () => (random() * 2 - 1) * limit2)),
@@ -68,14 +76,13 @@ function initialize(seed = 731) {
 }
 
 function validModel(value) {
-  return value?.schemaVersion === 2 && value.inputSize === INPUT_SIZE && value.hiddenSize === HIDDEN_SIZE
-    && Array.isArray(value.weights1) && value.weights1.length === HIDDEN_SIZE
-    && value.weights1.every(row => Array.isArray(row) && row.length === INPUT_SIZE && row.every(Number.isFinite))
-    && Array.isArray(value.bias1) && value.bias1.length === HIDDEN_SIZE && value.bias1.every(Number.isFinite)
-    && Array.isArray(value.weights2) && value.weights2.length === 2
-    && value.weights2.every(row => Array.isArray(row) && row.length === HIDDEN_SIZE && row.every(Number.isFinite))
-    && Array.isArray(value.bias2) && value.bias2.length === 2 && value.bias2.every(Number.isFinite)
-    && Number.isFinite(value.trainedExamples) && value.trainedExamples >= 0;
+  const matrix = (rows, rowCount, columnCount) => Array.isArray(rows) && rows.length === rowCount
+    && rows.every(row => Array.isArray(row) && row.length === columnCount && row.every(isFiniteNumber));
+  const vector = (values, length) => Array.isArray(values) && values.length === length && values.every(isFiniteNumber);
+  return value?.schemaVersion === 3 && value.inputSize === INPUT_SIZE && value.hiddenSize === HIDDEN_SIZE
+    && matrix(value.weights1, HIDDEN_SIZE, INPUT_SIZE) && vector(value.bias1, HIDDEN_SIZE)
+    && matrix(value.weights2, 2, HIDDEN_SIZE) && vector(value.bias2, 2)
+    && Number.isInteger(value.trainedExamples) && value.trainedExamples >= 0;
 }
 
 function forward(model, x) {
@@ -84,18 +91,29 @@ function forward(model, x) {
   return { hidden, output };
 }
 
+function baselineScore(training, evaluation) {
+  if (!training.length || !evaluation.length) return null;
+  const meanMinutes = training.reduce((sum, item) => sum + item.nextWeekMinutes, 0) / training.length;
+  const meanCompletion = training.reduce((sum, item) => sum + item.nextWeekCompletionRate, 0) / training.length;
+  return {
+    meanAbsoluteStudyMinutesError: Math.round(evaluation.reduce((sum, item) => sum + Math.abs(meanMinutes - item.nextWeekMinutes), 0) / evaluation.length),
+    meanAbsoluteCompletionRateError: Number((evaluation.reduce((sum, item) => sum + Math.abs(meanCompletion - item.nextWeekCompletionRate), 0) / evaluation.length).toFixed(2))
+  };
+}
+
 function score(model, examples) {
   if (!examples.length) return null;
   let minutesAbs = 0, completionAbs = 0, mse = 0;
   for (const item of examples) {
     const output = forward(model, encode(item.features)).output;
-    const actualMinutes = Number(item.nextWeekMinutes);
-    const actualCompletion = Number(item.nextWeekCompletionRate);
+    const actualMinutes = item.nextWeekMinutes;
+    const actualCompletion = item.nextWeekCompletionRate;
     const predictedMinutes = output[0] * OUTPUT_SCALE;
     const predictedCompletion = output[1] * 100;
     minutesAbs += Math.abs(predictedMinutes - actualMinutes);
     completionAbs += Math.abs(predictedCompletion - actualCompletion);
-    mse += ((predictedMinutes - actualMinutes) / OUTPUT_SCALE) ** 2 + ((predictedCompletion - actualCompletion) / 100) ** 2;
+    mse += ((predictedMinutes - actualMinutes) / OUTPUT_SCALE) ** 2
+      + ((predictedCompletion - actualCompletion) / 100) ** 2;
   }
   return {
     examples: examples.length,
@@ -105,22 +123,12 @@ function score(model, examples) {
   };
 }
 
-function baselineScore(training, evaluation) {
-  if (!training.length || !evaluation.length) return null;
-  const meanMinutes = training.reduce((sum, item) => sum + Number(item.nextWeekMinutes), 0) / training.length;
-  const meanCompletion = training.reduce((sum, item) => sum + Number(item.nextWeekCompletionRate), 0) / training.length;
-  return {
-    meanAbsoluteStudyMinutesError: Math.round(evaluation.reduce((sum, item) => sum + Math.abs(meanMinutes - Number(item.nextWeekMinutes)), 0) / evaluation.length),
-    meanAbsoluteCompletionRateError: Number((evaluation.reduce((sum, item) => sum + Math.abs(meanCompletion - Number(item.nextWeekCompletionRate)), 0) / evaluation.length).toFixed(2))
-  };
-}
-
 function createAdam() {
   const moments = new WeakMap();
   let stepCount = 0;
   return {
     beginStep() { stepCount++; },
-    step(array, index, gradient, options) {
+    step(array, index, gradient, learningRate) {
       let state = moments.get(array);
       if (!state) {
         state = { m: Array(array.length).fill(0), v: Array(array.length).fill(0) };
@@ -131,12 +139,12 @@ function createAdam() {
       state.v[index] = beta2 * state.v[index] + (1 - beta2) * gradient * gradient;
       const mHat = state.m[index] / (1 - Math.pow(beta1, stepCount));
       const vHat = state.v[index] / (1 - Math.pow(beta2, stepCount));
-      array[index] -= options.learningRate * mHat / (Math.sqrt(vHat) + 1e-8);
+      array[index] -= learningRate * mHat / (Math.sqrt(vHat) + 1e-8);
     }
   };
 }
 
-function trainBatch(model, batch, optimizer, options) {
+function trainBatch(model, batch, optimizer, learningRate, gradientClip) {
   const gW1 = model.weights1.map(row => row.map(() => 0));
   const gB1 = model.bias1.map(() => 0);
   const gW2 = model.weights2.map(row => row.map(() => 0));
@@ -144,9 +152,10 @@ function trainBatch(model, batch, optimizer, options) {
   for (const item of batch) {
     const x = encode(item.features);
     const { hidden, output } = forward(model, x);
-    const targets = [Number(item.nextWeekMinutes) / OUTPUT_SCALE, Number(item.nextWeekCompletionRate) / 100];
+    const targets = [item.nextWeekMinutes / OUTPUT_SCALE, item.nextWeekCompletionRate / 100];
     const d2 = output.map((value, i) => 2 * (value - targets[i]) * value * (1 - value));
-    const d1 = hidden.map((value, j) => (d2[0] * model.weights2[0][j] + d2[1] * model.weights2[1][j]) * (1 - value * value));
+    const d1 = hidden.map((value, j) =>
+      (d2[0] * model.weights2[0][j] + d2[1] * model.weights2[1][j]) * (1 - value * value));
     for (let i = 0; i < 2; i++) {
       gB2[i] += d2[i];
       for (let j = 0; j < HIDDEN_SIZE; j++) gW2[i][j] += d2[i] * hidden[j];
@@ -158,29 +167,21 @@ function trainBatch(model, batch, optimizer, options) {
   }
   const gradients = [...gW1.flat(), ...gB1, ...gW2.flat(), ...gB2].map(value => value / batch.length);
   const norm = Math.sqrt(gradients.reduce((sum, value) => sum + value * value, 0));
-  const clip = norm > options.gradientClip ? options.gradientClip / norm : 1;
+  const scale = norm > gradientClip ? gradientClip / norm : 1;
   let cursor = 0;
   optimizer.beginStep();
-  const apply = array => {
-    for (let i = 0; i < array.length; i++) {
-      if (Array.isArray(array[i])) {
-        for (let j = 0; j < array[i].length; j++) optimizer.step(array[i], j, gradients[cursor++] * clip, options);
-      } else optimizer.step(array, i, gradients[cursor++] * clip, options);
+  const apply = (arrays) => {
+    for (const array of arrays) {
+      for (let i = 0; i < array.length; i++) optimizer.step(array, i, gradients[cursor++] * scale, learningRate);
     }
   };
-  apply(model.weights1); apply(model.bias1); apply(model.weights2); apply(model.bias2);
+  apply([...model.weights1, model.bias1, ...model.weights2, model.bias2]);
 }
 
 function orderedExamples(raw) {
-  const accepted = raw.filter(validExample);
-  if (accepted.every(item => item.weekStart && Number.isFinite(Date.parse(item.weekStart)))) {
-    accepted.sort((a, b) => Date.parse(a.weekStart) - Date.parse(b.weekStart));
-  }
+  const accepted = raw.filter(validExample).sort((a, b) => a.weekStart.localeCompare(b.weekStart));
   const unique = new Map();
-  for (const item of accepted) {
-    if (item.weekStart) unique.set(String(item.weekStart), item);
-    else unique.set(Symbol(), item);
-  }
+  for (const item of accepted) unique.set(item.weekStart, item);
   return [...unique.values()];
 }
 
@@ -191,102 +192,105 @@ export function createStudyNeuralModel(savedModel = null) {
     if (!config || typeof config !== 'object' || Array.isArray(config)) config = {};
     if (!Array.isArray(rawExamples)) throw new TypeError('training examples must be an array');
     const examples = orderedExamples(rawExamples);
-    if (examples.length < MINIMUM_EXAMPLES) {
-      return { status: 'insufficient_training_data', acceptedExamples: examples.length, minimumExamples: MINIMUM_EXAMPLES, model: structuredClone(model) };
+    if (examples.length < MIN_EXAMPLES) {
+      return {
+        status: 'insufficient_training_data',
+        acceptedExamples: examples.length,
+        minimumExamples: MIN_EXAMPLES,
+        requiredFields: ['weekStart', 'features', 'nextWeekMinutes', 'nextWeekCompletionRate']
+      };
     }
-    const hasHoldout = examples.length >= 20;
-    const splitAt = hasHoldout ? Math.max(20, Math.floor(examples.length * 0.8)) : examples.length;
+    const splitAt = Math.floor(examples.length * 0.8);
     const training = examples.slice(0, splitAt);
     const validation = examples.slice(splitAt);
+    if (validation.length < MIN_VALIDATION) return { status: 'insufficient_validation_data', acceptedExamples: examples.length };
     const candidate = config.warmStart && model.trainedExamples ? structuredClone(model) : initialize(config.seed ?? 731);
     const options = {
-      epochs: clamp(Math.floor(finite(config.epochs, 300)), 30, 1200),
-      learningRate: clamp(finite(config.learningRate, 0.008), 0.0005, 0.04),
-      batchSize: clamp(Math.floor(finite(config.batchSize, 8)), 1, 32),
-      gradientClip: clamp(finite(config.gradientClip, 1), 0.1, 5)
+      epochs: clamp(Math.floor(Number.isFinite(config.epochs) ? config.epochs : 320), 40, 1200),
+      learningRate: clamp(Number.isFinite(config.learningRate) ? config.learningRate : 0.006, 0.0005, 0.03),
+      batchSize: clamp(Math.floor(Number.isFinite(config.batchSize) ? config.batchSize : 8), 1, 32),
+      gradientClip: clamp(Number.isFinite(config.gradientClip) ? config.gradientClip : 1, 0.1, 5)
     };
     const random = randomGenerator(config.seed ?? 731);
     const optimizer = createAdam();
-    const baseline = baselineScore(training, validation.length ? validation : training);
-    let best = structuredClone(candidate), bestLoss = Infinity, stale = 0, completedEpochs = 0;
+    const baseline = baselineScore(training, validation);
+    let best = structuredClone(candidate);
+    let bestLoss = Infinity, stale = 0, completedEpochs = 0;
     for (let epoch = 0; epoch < options.epochs; epoch++) {
       const shuffled = [...training];
       for (let i = shuffled.length - 1; i > 0; i--) {
         const j = Math.floor(random() * (i + 1));
         [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
       }
-      const epochOptions = { ...options, learningRate: options.learningRate * Math.max(0.25, 1 - epoch / options.epochs) };
+      const learningRate = options.learningRate * Math.max(0.25, 1 - epoch / options.epochs);
       for (let start = 0; start < shuffled.length; start += options.batchSize) {
-        trainBatch(candidate, shuffled.slice(start, start + options.batchSize), optimizer, epochOptions);
+        trainBatch(modelCandidate(), shuffled.slice(start, start + options.batchSize), optimizer, learningRate, options.gradientClip);
       }
       completedEpochs = epoch + 1;
-      const evaluation = score(candidate, validation.length ? validation : training);
-      if (evaluation.normalizedMeanSquaredError < bestLoss - 1e-7) {
+      const evaluation = score(candidateModel, validation);
+      if (evaluation.normalizedMeanSquaredError < bestLoss - 1e-8) {
         bestLoss = evaluation.normalizedMeanSquaredError;
-        best = structuredClone(candidate);
+        best = structuredClone(candidateModel);
         stale = 0;
       } else stale++;
-      if (stale >= 60) break;
+      if (stale >= 65) break;
     }
-    const evaluation = validation.length ? score(best, validation) : null;
-    const beatsBaseline = evaluation && baseline
-      ? evaluation.meanAbsoluteStudyMinutesError <= baseline.meanAbsoluteStudyMinutesError
-        && evaluation.meanAbsoluteCompletionRateError <= baseline.meanAbsoluteCompletionRateError
-      : null;
-    best.trainedExamples = examples.length;
-    best.trainingExamples = training.length;
+    const evaluation = score(best, validation);
+    const beatsBaseline = evaluation.meanAbsoluteStudyMinutesError <= baseline.meanAbsoluteStudyMinutesError
+      && evaluation.meanAbsoluteCompletionRateError <= baseline.meanAbsoluteCompletionRateError;
+    best.trainedExamples = training.length;
     best.epochs = completedEpochs;
-    best.validation = evaluation ? { ...evaluation, baseline, beatsBaseline } : null;
+    best.validation = { ...evaluation, baseline, beatsBaseline };
+    best.trainingRange = { from: training[0].weekStart, through: training.at(-1).weekStart };
+    best.validationRange = { from: validation[0].weekStart, through: validation.at(-1).weekStart };
     model = best;
     return {
-      status: 'trained', acceptedExamples: examples.length,
-      trainingExamples: training.length, validationExamples: validation.length,
-      epochs: completedEpochs, validation: best.validation,
-      model: structuredClone(model)
+      status: 'trained', acceptedExamples: examples.length, trainingExamples: training.length,
+      validationExamples: validation.length, epochs: completedEpochs,
+      validation: structuredClone(best.validation), model: structuredClone(model)
     };
   }
 
   function predict(features = {}) {
-    if (model.trainedExamples < MINIMUM_EXAMPLES) {
-      return { status: 'insufficient_training', reliability: 'low_or_unvalidated', nextWeekMinutes: null, nextWeekCompletionRate: null };
+    if (model.trainedExamples < MIN_EXAMPLES || !model.validation) {
+      return { status: 'insufficient_training', reliability: 'unavailable', nextWeekMinutes: null, nextWeekCompletionRate: null };
     }
-    if (features && typeof features === 'object' && Object.values(features).some(value =>
-      value !== null && value !== '' && value !== undefined && !Number.isFinite(Number(value)))) {
-      return { status: 'invalid_features', reliability: 'low_or_unvalidated', nextWeekMinutes: null, nextWeekCompletionRate: null };
-    }
+    if (!validFeatures(features)) return { status: 'invalid_features', reliability: 'unavailable', nextWeekMinutes: null, nextWeekCompletionRate: null };
     const [minuteRatio, completionRatio] = forward(model, encode(features)).output;
     const minutes = Math.round(minuteRatio * OUTPUT_SCALE);
-    const completion = Math.round(completionRatio * 100);
+    const completion = Number((completionRatio * 100).toFixed(1));
     const metrics = model.validation;
-    const provenCandidate = metrics?.beatsBaseline === true && model.trainedExamples >= 100;
-    const reliability = provenCandidate ? 'promising_not_proven' : 'low_or_unvalidated';
+    const reliability = metrics.beatsBaseline !== true ? 'limited'
+      : model.trainedExamples >= 100 && metrics.meanAbsoluteStudyMinutesError < 600 && metrics.meanAbsoluteCompletionRateError < 12
+        ? 'promising_not_proven' : 'developing';
     return {
       status: 'experimental_estimate',
       nextWeekMinutes: minutes,
-      nextWeekMinutesRange: metrics ? [
-        Math.max(0, minutes - metrics.meanAbsoluteStudyMinutesError),
-        Math.min(OUTPUT_SCALE, minutes + metrics.meanAbsoluteStudyMinutesError)
-      ] : null,
+      nextWeekMinutesRange: [Math.max(0, minutes - metrics.meanAbsoluteStudyMinutesError), Math.min(OUTPUT_SCALE, minutes + metrics.meanAbsoluteStudyMinutesError)],
       nextWeekCompletionRate: completion,
-      nextWeekCompletionRateRange: metrics ? [
-        Math.max(0, completion - Math.round(metrics.meanAbsoluteCompletionRateError)),
-        Math.min(100, completion + Math.round(metrics.meanAbsoluteCompletionRateError))
-      ] : null,
+      completionRateRange: [Math.max(0, completion - metrics.meanAbsoluteCompletionRateError), Math.min(100, completion + metrics.meanAbsoluteCompletionRateError)],
       reliability,
       trainedExamples: model.trainedExamples,
-      validation: metrics ? {
+      validation: {
+        examples: metrics.examples,
         studyMinutesMAE: metrics.meanAbsoluteStudyMinutesError,
         completionRateMAE: metrics.meanAbsoluteCompletionRateError,
         beatsSimpleBaseline: metrics.beatsBaseline
-      } : null,
+      },
       warning: 'این تخمین آزمایشی است و فقط با داده‌های معتبر و نماینده قابل اتکاست؛ تضمین نمره یا نتیجه آزمون نیست.'
     };
   }
 
   return Object.freeze({
-    train, predict,
+    train,
+    predict,
     exportModel: () => structuredClone(model),
-    getMetrics: () => ({ trainedExamples: model.trainedExamples, trainingExamples: model.trainingExamples ?? 0, epochs: model.epochs, validation: model.validation }),
+    getMetrics: () => ({
+      trainedExamples: model.trainedExamples, epochs: model.epochs,
+      validation: structuredClone(model.validation),
+      trainingRange: model.trainingRange ?? null,
+      validationRange: model.validationRange ?? null
+    }),
     reset: () => { model = initialize(); return model.schemaVersion; }
   });
 }
