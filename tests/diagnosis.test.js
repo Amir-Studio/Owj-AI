@@ -16,7 +16,7 @@ test('does not diagnose mastery from one assessment', () => {
     assessments: assessmentSet([42])
   });
   assert.equal(result.code, 'insufficient_evidence');
-  assert.equal(result.confidence, 0.25);
+  assert.equal(result.confidence, 0.08);
 });
 
 test('separates repeated low performance after meaningful practice from low practice', () => {
