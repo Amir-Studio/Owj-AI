@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getSubjectPlanFitAdjustments, proposeAdaptivePlan } from '../src/index.js';
+import { getSubjectPlanFitAdjustments, proposeAdaptivePlan, getPlanFitAdjustment, summarizeFeedback } from '../src/index.js';
 
 const outcome = (subject, plannedMinutes, actualMinutes, completed = true) => ({
   kind: 'plan_outcome', subject, plannedMinutes, actualMinutes, completed
@@ -66,4 +66,24 @@ test('feeds subject feedback into future proposal weights without changing saved
   assert.ok(adaptedMath < baselineMath);
   assert.equal(adapted.subjectFitAdjustments.Math.factor, 0.85);
   assert.equal(adapted.blocks.reduce((sum, item) => sum + item.suggestedMinutes, 0), adapted.recommendedDailyMinutes);
+});
+
+
+test('ignores incomplete legacy outcomes instead of learning that they were zero-minute sessions', () => {
+  const mixed = [
+    outcome('Math', 60, 0, false),
+    { kind: 'plan_outcome', subject: 'Math', plannedMinutes: 60, completed: false },
+    { kind: 'plan_outcome', subject: 'Math', plannedMinutes: 60, actualMinutes: NaN, completed: false },
+    outcome('Math', 60, 60, true),
+    outcome('Math', 60, 60, true)
+  ];
+  const subjectFit = getSubjectPlanFitAdjustments(mixed);
+  assert.equal(subjectFit.Math.sampleSize, 3);
+  assert.equal(subjectFit.Math.factor, 1);
+  const globalFit = getPlanFitAdjustment(mixed);
+  assert.equal(globalFit.sampleSize, 3);
+  assert.equal(globalFit.factor, 1);
+  const summary = summarizeFeedback(mixed);
+  assert.equal(summary.planOutcomeCount, 3);
+  assert.equal(summary.medianActualToPlannedRatio, 1);
 });
