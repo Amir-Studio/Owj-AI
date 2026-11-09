@@ -178,26 +178,34 @@ export function detectPatterns(input, data, memory = {}, now = new Date()) {
 export function predictStudyTrend(data, memory = {}) {
   const current = data.overview.totalMinutes7d;
   const previous = data.overview.totalMinutesPrevious7d;
-  const snapshots = (memory?.snapshots ?? []).filter(s => Number.isFinite(s.totalMinutes7d)).slice(-8);
-  const distinctWeeks = [...new Map(snapshots.map(s => [s.weekKey, s])).values()];
+  const snapshots = (memory?.snapshots ?? [])
+    .filter(s => Number.isFinite(s.totalMinutes7d) && typeof s.weekKey === 'string' && !Number.isNaN(Date.parse(s.weekKey)))
+    .slice(-12);
+  const distinctWeeks = [...new Map(snapshots.map(s => [s.weekKey, s])).values()]
+    .sort((a, b) => Date.parse(a.weekKey) - Date.parse(b.weekKey));
+  const points = distinctWeeks.map(s => ({
+    x: Date.parse(s.weekKey) / (7 * DAY),
+    y: s.totalMinutes7d
+  }));
   let direction = 'insufficient_data';
   let estimatedNextWeekMinutes = null;
   let confidence = 0.15;
   let method = 'insufficient_history';
   let slope = null;
 
-  if (distinctWeeks.length >= 3) {
-    const values = distinctWeeks.map(s => s.totalMinutes7d);
-    const xMean = (values.length - 1) / 2;
-    const yMean = average(values);
-    const denominator = values.reduce((sum, _, i) => sum + (i - xMean) ** 2, 0);
-    slope = denominator ? values.reduce((sum, y, i) => sum + (i - xMean) * (y - yMean), 0) / denominator : 0;
+  if (points.length >= 3 && points.at(-1).x - points[0].x >= 2) {
+    const xMean = average(points.map(point => point.x));
+    const yMean = average(points.map(point => point.y));
+    const denominator = points.reduce((sum, point) => sum + (point.x - xMean) ** 2, 0);
+    slope = denominator
+      ? points.reduce((sum, point) => sum + (point.x - xMean) * (point.y - yMean), 0) / denominator
+      : 0;
     const predicted = clamp(current + slope, 0, Math.max(6000, current * 2 + 120));
     estimatedNextWeekMinutes = round(predicted);
     const relativeSlope = slope / Math.max(60, yMean);
     direction = relativeSlope > 0.08 ? 'increasing' : relativeSlope < -0.08 ? 'decreasing' : 'stable';
-    confidence = clamp(0.35 + distinctWeeks.length * 0.06, 0.35, 0.8);
-    method = 'weekly_linear_trend';
+    confidence = clamp(0.35 + points.length * 0.06, 0.35, 0.8);
+    method = 'gap_aware_weekly_linear_trend';
   } else if (previous > 0) {
     const change = (current - previous) / previous;
     direction = change > 0.08 ? 'increasing' : change < -0.08 ? 'decreasing' : 'stable';
@@ -390,7 +398,7 @@ export function createOwjAI({ storage, clock = () => new Date() } = {}) {
     const trend = predictStudyTrend(data, old);
     const priorities = rankPriorities(input, data, patterns, now);
     const feedbackSummary = summarizeFeedback(old?.feedback ?? []);
-    const settledForecasts = settleWeeklyForecasts(old?.forecastHistory ?? [], input.sessions, now);
+    const settledForecasts = settleWeeklyForecasts(old?.forecastHistory ?? [], input.sessions, now, toDate(raw.historyCompleteThrough));
     const forecastHistory = createWeeklyForecast(settledForecasts, trend, now).slice(-16);
     const forecastAccuracy = summarizeForecastAccuracy(forecastHistory);
     const planProposal = proposeAdaptivePlan(input, data, priorities, patterns, now, old ?? {});
