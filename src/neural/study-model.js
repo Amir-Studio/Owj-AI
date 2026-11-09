@@ -37,9 +37,15 @@ function encode(features = {}) {
 
 function validFeatures(features) {
   if (!features || typeof features !== 'object' || Array.isArray(features)) return false;
-  const present = FEATURE_KEYS.filter(key => features[key] !== null && features[key] !== undefined
-    && features[key] !== '' && Number.isFinite(Number(features[key])));
-  return present.length >= 8;
+  let present = 0;
+  for (const [key, min, max] of FEATURE_SPECS) {
+    const value = features[key];
+    if (value === null || value === undefined || value === '') continue;
+    const number = Number(value);
+    if (!Number.isFinite(number) || number < min || number > max) return false;
+    present++;
+  }
+  return present >= 8;
 }
 
 function validExample(item) {
