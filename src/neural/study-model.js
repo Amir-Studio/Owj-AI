@@ -102,6 +102,8 @@ function baselineScore(training, evaluation) {
   const meanMinutes = training.reduce((sum, item) => sum + item.nextWeekMinutes, 0) / training.length;
   const meanCompletion = training.reduce((sum, item) => sum + item.nextWeekCompletionRate, 0) / training.length;
   return {
+    meanMinutes: Math.round(meanMinutes),
+    meanCompletionRate: Number(meanCompletion.toFixed(2)),
     meanAbsoluteStudyMinutesError: Math.round(evaluation.reduce((sum, item) => sum + Math.abs(meanMinutes - item.nextWeekMinutes), 0) / evaluation.length),
     meanAbsoluteCompletionRateError: Number((evaluation.reduce((sum, item) => sum + Math.abs(meanCompletion - item.nextWeekCompletionRate), 0) / evaluation.length).toFixed(2))
   };
@@ -263,6 +265,42 @@ export function createStudyNeuralModel(savedModel = null) {
       return { status: 'insufficient_training', reliability: 'unavailable', nextWeekMinutes: null, nextWeekCompletionRate: null };
     }
     if (!validFeatures(features)) return { status: 'invalid_features', reliability: 'unavailable', nextWeekMinutes: null, nextWeekCompletionRate: null };
+    // Never present a neural estimate as useful when it fails to beat the
+    // training-only baseline on BOTH held-out targets. Fall back to that
+    // baseline instead; this also keeps the hybrid decision layer from
+    // treating a weak neural model as an independent positive signal.
+    if (model.validation.beatsBaseline !== true) {
+      const baseline = model.validation.baseline;
+      if (!Number.isFinite(baseline?.meanMinutes) || !Number.isFinite(baseline?.meanCompletionRate)) {
+        return { status: 'validation_incomplete', reliability: 'unavailable', nextWeekMinutes: null, nextWeekCompletionRate: null };
+      }
+      const minutes = baseline.meanMinutes;
+      const completion = baseline.meanCompletionRate;
+      return {
+        status: 'baseline_fallback',
+        predictor: 'training_mean_baseline',
+        nextWeekMinutes: minutes,
+        nextWeekMinutesRange: [
+          Math.max(0, minutes - baseline.meanAbsoluteStudyMinutesError),
+          Math.min(OUTPUT_SCALE, minutes + baseline.meanAbsoluteStudyMinutesError)
+        ],
+        nextWeekCompletionRate: completion,
+        completionRateRange: [
+          Math.max(0, completion - baseline.meanAbsoluteCompletionRateError),
+          Math.min(100, completion + baseline.meanAbsoluteCompletionRateError)
+        ],
+        reliability: 'limited',
+        trainedExamples: model.trainedExamples,
+        totalExamples: model.totalExamples ?? model.trainedExamples,
+        validation: {
+          examples: model.validation.examples,
+          studyMinutesMAE: model.validation.meanAbsoluteStudyMinutesError,
+          completionRateMAE: model.validation.meanAbsoluteCompletionRateError,
+          beatsSimpleBaseline: false
+        },
+        warning: 'مدل عصبی از خط مبنای ساده بهتر نشده است؛ بنابراین به‌جای خروجی شبکه، میانگین آموزشی گزارش می‌شود.'
+      };
+    }
     const [minuteRatio, completionRatio] = forward(model, encode(features)).output;
     const minutes = Math.round(minuteRatio * OUTPUT_SCALE);
     const completion = Number((completionRatio * 100).toFixed(1));
