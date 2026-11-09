@@ -21,7 +21,7 @@ function normalizeFeatures(features = {}) {
 }
 
 function validExample(item) {
-  return item && typeof item === 'object'
+  return item && typeof item === 'object' && item.features && typeof item.features === 'object' && !Array.isArray(item.features)
     && Number.isFinite(Number(item.nextWeekMinutes))
     && Number(item.nextWeekMinutes) >= 0
     && Number(item.nextWeekMinutes) <= OUTPUT_SCALE
