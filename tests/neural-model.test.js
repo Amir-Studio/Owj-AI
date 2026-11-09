@@ -28,16 +28,17 @@ function makeExamples(count = 50) {
   });
 }
 
-test('neural model refuses sparse or malformed training data', () => {
+test('model requires enough complete weekly labels and rejects legacy leaked labels', () => {
   const model = createStudyNeuralModel();
-  const result = model.train(makeExamples(8));
-  assert.equal(result.status, 'insufficient_training_data');
+  assert.equal(model.train(makeExamples(8)).status, 'insufficient_training_data');
+  const legacy = makeExamples(40).map(({ nextWeekCompletionRate, ...item }) => item);
+  assert.equal(model.train(legacy).status, 'insufficient_training_data');
   assert.equal(model.predict({}).status, 'insufficient_training');
 });
 
-test('neural model trains on chronological data and reports holdout metrics', () => {
+test('model trains chronologically and evaluates on a held-out future period', () => {
   const model = createStudyNeuralModel();
-  const trained = model.train(makeExamples(), { epochs: 220, seed: 42 });
+  const trained = model.train(makeExamples(), { epochs: 180, seed: 42 });
   assert.equal(trained.status, 'trained');
   assert.equal(trained.acceptedExamples, 50);
   assert.equal(trained.trainingExamples, 40);
@@ -45,23 +46,25 @@ test('neural model trains on chronological data and reports holdout metrics', ()
   assert.equal(trained.validation.examples, 10);
   assert.ok(trained.validation.meanAbsoluteStudyMinutesError >= 0);
   assert.ok(typeof trained.validation.beatsBaseline === 'boolean');
+  const metrics = model.getMetrics();
+  assert.equal(metrics.trainingRange.through < metrics.validationRange.from, true);
   const prediction = model.predict(makeExamples()[49].features);
   assert.equal(prediction.status, 'experimental_estimate');
   assert.ok(prediction.nextWeekMinutes >= 0 && prediction.nextWeekMinutes <= 10080);
   assert.ok(prediction.nextWeekCompletionRate >= 0 && prediction.nextWeekCompletionRate <= 100);
-  assert.ok(['promising_not_proven', 'low_or_unvalidated'].includes(prediction.reliability));
+  assert.ok(['limited', 'developing', 'promising_not_proven'].includes(prediction.reliability));
   assert.equal(model.exportModel().schemaVersion, 3);
   assert.equal(STUDY_NEURAL_INPUTS.length, 12);
 });
 
-test('saved neural weights restore identical local predictions', () => {
+test('saved model weights restore identical predictions', () => {
   const first = createStudyNeuralModel();
   first.train(makeExamples(), { seed: 17 });
   const second = createStudyNeuralModel(first.exportModel());
   assert.deepEqual(second.predict(makeExamples()[20].features), first.predict(makeExamples()[20].features));
 });
 
-test('malformed feature payloads and duplicate weeks are excluded', () => {
+test('duplicate weeks collapse and malformed records are ignored', () => {
   const model = createStudyNeuralModel();
   const valid = makeExamples(40);
   const malformed = { ...valid[0], features: null };
@@ -71,29 +74,15 @@ test('malformed feature payloads and duplicate weeks are excluded', () => {
   assert.equal(result.acceptedExamples, 40);
 });
 
-test('invalid inference features are not silently treated as zero', () => {
+test('missing inference fields are reported rather than silently converted to zero', () => {
   const model = createStudyNeuralModel();
-  model.train(makeExamples(), { seed: 19 });
+  model.train(makeExamples(), { seed: 19, epochs: 120 });
   assert.equal(model.predict({ studyMinutes7d: 100 }).status, 'invalid_features');
+  assert.equal(model.predict(makeExamples()[10].features).status, 'experimental_estimate');
 });
 
-test('old or malformed model weights are safely rejected', () => {
+test('invalid or obsolete serialized weights are safely rejected', () => {
   const model = createStudyNeuralModel({ schemaVersion: 2, hiddenSize: 16, weights1: [[NaN]] });
-  assert.equal(model.predict({}).status, 'insufficient_training');
-});
-
-test('missing features are represented separately from genuine zero values', () => {
-  const model = createStudyNeuralModel();
-  const trained = model.train(makeExamples(40), { seed: 7, epochs: 120 });
-  assert.equal(trained.status, 'trained');
-  const a = model.predict({ studyMinutes7d: 0 });
-  const b = model.predict({});
-  assert.ok(Number.isFinite(a.nextWeekMinutes));
-  assert.ok(Number.isFinite(b.nextWeekMinutes));
-});
-
-test('rejects malformed or incompatible serialized weights safely', () => {
-  const model = createStudyNeuralModel({ schemaVersion: 2, inputSize: 999, hiddenSize: 16, weights1: [], weights2: [] });
   assert.equal(model.getMetrics().trainedExamples, 0);
   assert.equal(model.predict({}).status, 'insufficient_training');
 });
