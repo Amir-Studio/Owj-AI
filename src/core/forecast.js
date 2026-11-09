@@ -8,6 +8,7 @@ const weekStart = date => {
 };
 
 export function createWeeklyForecast(history = [], trend, now = new Date()) {
+  if (!Array.isArray(history)) history = [];
   if (!trend || !Number.isFinite(trend.estimatedNextWeekMinutes) || trend.method === 'insufficient_history') return history;
   const currentWeek = weekStart(now).toISOString().slice(0, 10);
   if (history.some(item => item.issuedWeekKey === currentWeek)) return history;
@@ -27,10 +28,12 @@ export function createWeeklyForecast(history = [], trend, now = new Date()) {
 }
 
 export function settleWeeklyForecasts(history = [], sessions = [], now = new Date(), historyCompleteThrough = null) {
+  if (!Array.isArray(history)) history = [];
+  if (!Array.isArray(sessions)) sessions = [];
   const coverage = historyCompleteThrough instanceof Date
     ? historyCompleteThrough
     : historyCompleteThrough == null ? null : new Date(historyCompleteThrough);
-  return history.map(forecast => {
+  return history.filter(forecast => forecast && typeof forecast === 'object').map(forecast => {
     const start = new Date(forecast.targetStartAt);
     const end = new Date(forecast.targetEndAt);
     if (forecast.actualMinutes != null || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())
@@ -51,6 +54,7 @@ export function settleWeeklyForecasts(history = [], sessions = [], now = new Dat
 }
 
 export function summarizeForecastAccuracy(history = []) {
+  if (!Array.isArray(history)) history = [];
   const evaluated = history.filter(item => Number.isFinite(item.actualMinutes));
   const errors = evaluated.map(item => item.absoluteErrorMinutes);
   const percentageErrors = evaluated.filter(item => Number.isFinite(item.absolutePercentageError))
