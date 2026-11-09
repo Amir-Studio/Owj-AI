@@ -85,7 +85,7 @@ export function buildHybridDecision({
   const lead = actions[0] ?? null;
   const evidenceGrade = confidence >= 0.68 ? 'stronger' : confidence >= 0.42 ? 'moderate' : 'limited';
   return {
-    version: '0.9.0',
+    version: '0.9.1',
     status: lead ? 'decision_available' : 'insufficient_subject_data',
     primaryFocus: lead ? {
       subject: lead.subject, score: lead.score, priority: lead.priority,
