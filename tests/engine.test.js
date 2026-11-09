@@ -239,3 +239,26 @@ test('recovers safely from malformed optional memory collections', async () => {
   assert.ok(Array.isArray(saved.snapshots));
   assert.ok(Array.isArray(saved.forecastHistory));
 });
+
+
+test('uses recent assessment performance to prioritize weak subjects', async () => {
+  const ai = createOwjAI({ clock: () => now });
+  const result = await ai.analyze({
+    userId: 'u-assessments',
+    profile: { dailyAvailableMinutes: 180, subjects: ['Math', 'Physics'] },
+    sessions: [], plans: [], exams: [],
+    assessments: [
+      { id: 'm1', subject: 'Math', score: 4, maxScore: 10, date: '2026-11-08T10:00:00Z', type: 'quiz' },
+      { id: 'm2', subject: 'Math', scorePercent: 35, date: '2026-11-06T10:00:00Z', type: 'quiz' },
+      { id: 'p1', subject: 'Physics', scorePercent: 92, date: '2026-11-08T10:00:00Z', type: 'quiz' }
+    ]
+  });
+  const math = result.subjects.find(subject => subject.subject === 'Math');
+  const physics = result.subjects.find(subject => subject.subject === 'Physics');
+  assert.equal(math.recentPerformancePercent, 38);
+  assert.equal(math.assessmentCount, 2);
+  assert.equal(physics.recentPerformancePercent, 92);
+  const weakSubject = result.priorities.find(item => item.reasonCode === 'LOW_ASSESSMENT_PERFORMANCE');
+  assert.equal(weakSubject.subject, 'Math');
+  assert.equal(weakSubject.priority, 'high');
+});
