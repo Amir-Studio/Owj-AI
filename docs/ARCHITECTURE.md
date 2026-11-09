@@ -4,7 +4,7 @@ Owj AI v0.2 is a deterministic, provider-independent JavaScript intelligence eng
 
 ## Analysis pipeline
 
-1. Normalize dates, durations, statuses and subject names; exclude future sessions and safely ignore malformed records.
+1. Normalize dates, durations, statuses and subject names; exclude future sessions, safely ignore malformed records, and deduplicate sync retries by stable session ID.
 2. Aggregate total, recent-week and previous-week study activity, completion, and planned-versus-actual time.
 3. Include profile subjects with no recorded sessions so missing data is visible rather than silently omitted.
 4. Detect study-hour and weekday patterns, active-day consistency, subject concentration and repeated abandoned plans.
@@ -23,7 +23,7 @@ Run analysis after meaningful events (session completion, plan/exam changes, or 
 
 ## Memory and privacy
 
-Memory is keyed by authenticated user ID and stores aggregate snapshots, subject summaries and selected patterns—not full raw session history. Browser localStorage is the starter adapter; Capacitor Preferences or encrypted storage can replace it. Clear memory on sign-out when the product's account-isolation policy requires it.
+Memory is keyed by authenticated user ID and stores aggregate snapshots, subject summaries and selected patterns—not full raw session history. The browser adapter accepts both the legacy v1 and current v2 memory envelope so an engine upgrade does not silently erase existing user history. Browser localStorage is the starter adapter; Capacitor Preferences or encrypted storage can replace it. Clear memory on sign-out when the product's account-isolation policy requires it.
 
 ## Limits
 
