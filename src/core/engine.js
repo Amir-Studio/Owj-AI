@@ -565,14 +565,12 @@ export function createOwjAI({ storage, clock = () => new Date() } = {}) {
       entry.accepted = event.accepted;
       if (event.usefulness != null) entry.usefulness = clamp(round(finite(event.usefulness)), 1, 5);
     } else {
-      const plannedMinutes = Number(event.plannedMinutes);
-      const actualMinutes = Number(event.actualMinutes);
-      if (event.plannedMinutes == null || !Number.isFinite(plannedMinutes)
-        || plannedMinutes <= 0 || plannedMinutes > 24 * 60) {
+      const plannedMinutes = event.plannedMinutes;
+      const actualMinutes = event.actualMinutes;
+      if (!Number.isFinite(plannedMinutes) || plannedMinutes <= 0 || plannedMinutes > 24 * 60) {
         throw new TypeError('plan outcome requires plannedMinutes between 1 and 1440');
       }
-      if (event.actualMinutes == null || !Number.isFinite(actualMinutes)
-        || actualMinutes < 0 || actualMinutes > 24 * 60) {
+      if (!Number.isFinite(actualMinutes) || actualMinutes < 0 || actualMinutes > 24 * 60) {
         throw new TypeError('plan outcome requires actualMinutes between 0 and 1440');
       }
       entry.plannedMinutes = plannedMinutes;
