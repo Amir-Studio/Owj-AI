@@ -69,3 +69,55 @@ export function summarizeForecastAccuracy(history = []) {
       : 'هنوز پیش‌بینی‌های کافی به پایان نرسیده‌اند تا دقت مدل سنجیده شود.'
   };
 }
+
+/**
+ * Corrects systematic weekly forecast bias using only forecasts whose target
+ * periods are explicitly marked complete. Fewer than three outcomes never
+ * alter the forecast.
+ */
+export function calibrateWeeklyForecast(trend, history = []) {
+  if (!trend || !Number.isFinite(trend.estimatedNextWeekMinutes)) {
+    return { trend, status: 'unavailable', evaluatedForecasts: 0, biasCorrectionMinutes: 0, meanAbsoluteErrorMinutes: null, rangeMinutes: null };
+  }
+  const evaluated = (Array.isArray(history) ? history : [])
+    .filter(item => item && Number.isFinite(item.predictedMinutes) && Number.isFinite(item.actualMinutes)
+      && item.actualMinutes >= 0 && item.predictedMinutes >= 0)
+    .slice(-12);
+  if (evaluated.length < 3) {
+    return { trend, status: 'collecting', evaluatedForecasts: evaluated.length, biasCorrectionMinutes: 0, meanAbsoluteErrorMinutes: null, rangeMinutes: null };
+  }
+  const signedErrors = evaluated.map(item => item.predictedMinutes - item.actualMinutes).sort((a, b) => a - b);
+  const absoluteErrors = evaluated.map(item => Math.abs(item.predictedMinutes - item.actualMinutes)).sort((a, b) => a - b);
+  const medianOf = values => {
+    const middle = Math.floor(values.length / 2);
+    return values.length % 2 ? values[middle] : (values[middle - 1] + values[middle]) / 2;
+  };
+  const bias = medianOf(signedErrors);
+  const mae = Math.round(absoluteErrors.reduce((sum, value) => sum + value, 0) / absoluteErrors.length);
+  const correctedMinutes = Math.round(Math.max(0, trend.estimatedNextWeekMinutes - bias));
+  const meanActual = evaluated.reduce((sum, item) => sum + item.actualMinutes, 0) / evaluated.length;
+  const relativeError = mae / Math.max(60, meanActual);
+  const confidenceFactor = Math.max(0.35, Math.min(1, 1 - relativeError));
+  const calibratedTrend = {
+    ...trend,
+    rawEstimatedNextWeekMinutes: trend.estimatedNextWeekMinutes,
+    estimatedNextWeekMinutes: correctedMinutes,
+    confidence: Math.round((Number(trend.confidence) || 0) * confidenceFactor * 100) / 100,
+    calibration: {
+      status: 'calibrated',
+      evaluatedForecasts: evaluated.length,
+      biasCorrectionMinutes: Math.round(bias),
+      meanAbsoluteErrorMinutes: mae,
+      rangeMinutes: [Math.max(0, correctedMinutes - mae), correctedMinutes + mae],
+      confidenceFactor: Math.round(confidenceFactor * 100) / 100
+    }
+  };
+  return {
+    trend: calibratedTrend,
+    status: 'calibrated',
+    evaluatedForecasts: evaluated.length,
+    biasCorrectionMinutes: Math.round(bias),
+    meanAbsoluteErrorMinutes: mae,
+    rangeMinutes: calibratedTrend.calibration.rangeMinutes
+  };
+}
