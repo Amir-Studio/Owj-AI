@@ -96,7 +96,7 @@ export function assessDataQuality(rawSessions = [], now = new Date()) {
     const startedAt = toDate(item.startedAt ?? item.date ?? item.completedAt ?? item.createdAt);
     const rawMinutes = item.actualMinutes ?? item.durationMinutes ?? item.minutes;
     const minutes = Number(rawMinutes);
-    if (!startedAt || rawMinutes == null || !Number.isFinite(minutes) || minutes < 0) {
+    if (!startedAt || rawMinutes == null || String(rawMinutes).trim() === '' || !Number.isFinite(minutes) || minutes < 0) {
       invalidRecords += 1;
       continue;
     }
