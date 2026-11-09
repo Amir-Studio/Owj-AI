@@ -278,6 +278,7 @@ export function createStudyNeuralModel(savedModel = null) {
       completionRateRange: [Math.max(0, completion - metrics.meanAbsoluteCompletionRateError), Math.min(100, completion + metrics.meanAbsoluteCompletionRateError)],
       reliability,
       trainedExamples: model.trainedExamples,
+      totalExamples: model.totalExamples ?? model.trainedExamples,
       validation: {
         examples: metrics.examples,
         studyMinutesMAE: metrics.meanAbsoluteStudyMinutesError,
