@@ -62,3 +62,8 @@ The holdout reports mean absolute error for both outputs and compares them again
 The repository contains implementation and synthetic tests, not a production-trained model or real student dataset. Synthetic tests verify implementation paths, not real predictive quality. Before production use, evaluate on consented, representative student data across several exam periods and compare against simple baselines. The deterministic Owj engine remains the fallback when the neural model is untrained or weak.
 
 Prefer per-user local models. Do not pool student records without explicit informed consent, data minimization, access controls and a documented retention/deletion policy. Students should be able to inspect and clear their learning data.
+
+
+## Hybrid decision layer v0.9
+
+`buildHybridDecision` combines deterministic subject diagnoses, exam/subject priorities, recency, behavioral consistency, data quality, weekly trend and optional neural forecasts. Subject scores are confidence-damped so sparse or stale evidence cannot dominate. The result exposes ranked actions, the lead focus, an overall evidence grade, and signal disagreements. Neural output is used only when the model has valid training and holdout metrics; otherwise the hybrid layer reports it as unavailable and continues with deterministic evidence. This layer is decision support, not an autonomous tutor or a guarantee of academic outcomes.
