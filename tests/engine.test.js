@@ -50,8 +50,8 @@ test('adaptive proposal stays within its recommended capacity', () => {
 test('trend avoids a confident forecast without enough history', () => {
   const data = analyzeData(input, now);
   const trend = predictStudyTrend(data, {});
-  assert.equal(trend.method, 'week_over_week');
-  assert.equal(trend.confidence, 0.25);
+  assert.equal(trend.method, 'insufficient_history');
+  assert.equal(trend.confidence, 0.15);
 });
 
 test('engine persists isolated per-user memory and one snapshot per week', async () => {
