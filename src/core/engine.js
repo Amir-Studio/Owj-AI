@@ -24,7 +24,7 @@ const weekKey = value => {
 const makeId = () => globalThis.crypto?.randomUUID?.() ?? `owj-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
 
 function normalizeInput(raw, now) {
-  const sessions = raw.sessions.map((item, index) => {
+  const sessions = raw.sessions.filter(item => item && typeof item === 'object').map((item, index) => {
     const startedAt = toDate(item.startedAt ?? item.date ?? item.completedAt ?? item.createdAt);
     const actualMinutes = clamp(finite(item.actualMinutes ?? item.durationMinutes ?? item.minutes), 0, 24 * 60);
     const plannedMinutes = clamp(finite(item.plannedMinutes), 0, 24 * 60);
@@ -39,7 +39,7 @@ function normalizeInput(raw, now) {
     };
   }).filter(item => item.startedAt && item.startedAt <= now);
 
-  const plans = raw.plans.map((item, index) => ({
+  const plans = raw.plans.filter(item => item && typeof item === 'object').map((item, index) => ({
     id: String(item.id ?? index),
     subject: String(item.subject ?? '').trim(),
     plannedMinutes: clamp(finite(item.plannedMinutes ?? item.durationMinutes), 0, 24 * 60),
@@ -47,7 +47,7 @@ function normalizeInput(raw, now) {
     status: String(item.status ?? '')
   }));
 
-  const exams = raw.exams.map((item, index) => ({
+  const exams = raw.exams.filter(item => item && typeof item === 'object').map((item, index) => ({
     id: String(item.id ?? index),
     subject: String(item.subject ?? '').trim() || 'General',
     title: String(item.title ?? '').trim(),
@@ -57,7 +57,7 @@ function normalizeInput(raw, now) {
 
   const profile = raw.profile ?? {};
   const subjects = [...new Set((Array.isArray(profile.subjects) ? profile.subjects : [])
-    .map(value => String(typeof value === 'object' && value ? value.name ?? value.subject ?? '' : value).trim())
+    .filter(value => value != null).map(value => String(typeof value === 'object' && value ? value.name ?? value.subject ?? '' : value).trim())
     .filter(Boolean))];
   return {
     userId: raw.userId,
