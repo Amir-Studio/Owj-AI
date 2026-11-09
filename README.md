@@ -2,7 +2,7 @@
 
 **Owj AI** is the first-party, provider-independent intelligence engine for the Owj study planner.
 
-The v0.1 engine is written in JavaScript and runs inside the Owj app. It analyzes only data explicitly passed by Owj, detects study patterns, estimates trends, ranks priorities, proposes adaptive plans, and saves compact user-specific memory on the device.
+The v0.2 engine is written in JavaScript and runs inside the Owj app. It validates study records, detects personal routines, estimates weekly trends, ranks exam and subject priorities, proposes a workload-aware plan, and stores compact user-specific memory on the device.
 
 ## Product principles
 
@@ -10,28 +10,30 @@ The v0.1 engine is written in JavaScript and runs inside the Owj app. It analyze
 - Analysis is triggered by meaningful app events or a user-requested review.
 - The engine runs locally; internet can be used separately for optional Supabase synchronization.
 - Memory is isolated per authenticated user and stored on the device by default.
-- Recommendations include reasons. Proposed plans never silently overwrite saved plans.
+- Recommendations expose their reasons and forecast confidence.
+- Proposed plans never silently overwrite saved plans.
 - The engine never scans other apps, messages, files, or arbitrary device activity.
 
-## Architecture
+## Intelligence pipeline
 
 ```text
-Owj React / Capacitor app
-       | profile, sessions, plans, exams
-       v
-     OwjAI
-       +-- DataAnalyzer
-       +-- PatternDetector
-       +-- PredictionEngine
-       +-- PriorityEngine
-       +-- AdaptivePlanner
-       +-- RecommendationEngine
-       |
-       v
-  MemoryManager <--> on-device storage
-       |
-       v
-  insights + evidence + proposed adjustments
+Owj profile + sessions + plans + exams
+                 |
+          Data validation
+                 |
+      Behavioral analytics
+                 |
+       Pattern detection
+                 |
+     Weekly trend estimation
+                 |
+       Priority ranking
+                 |
+      Adaptive plan proposal
+                 |
+    Explainable recommendations
+                 |
+       On-device memory
 ```
 
 ## Quick start
@@ -44,10 +46,10 @@ npm test
 npm run lint
 ```
 
-The repository is source-first. For the first integration, copy `src/` into the Owj React/Vite project or add this repository as a workspace package.
+The repository is source-first. For integration, add this repository as a workspace package or import its `src/` entry point into the Owj React/Vite project.
 
 ```js
-import { createOwjAI, createBrowserMemoryStorage } from './ai/index.js';
+import { createOwjAI, createBrowserMemoryStorage } from '@owj/ai';
 
 const owjAI = createOwjAI({
   storage: createBrowserMemoryStorage(),
@@ -74,6 +76,6 @@ console.log(result.recommendations);
 
 ## Honest capability boundary
 
-This is an adaptive rules-and-statistics engine, not a trained neural network or a general-purpose conversational model. It learns user-specific patterns by updating structured memory; it does not change model weights. Its confidence depends on data volume and quality. It currently focuses on study analytics and planning, not arbitrary textbook question answering or unrestricted chat.
+This is an adaptive rules-and-statistics engine, not a trained neural network or general-purpose conversational model. It learns user-specific patterns by updating structured memory; it does not change model weights. Its forecasts describe study activity, not guaranteed learning outcomes or exam scores. It currently focuses on study analytics and planning, not arbitrary textbook question answering.
 
 The user remains in control of every schedule change.
