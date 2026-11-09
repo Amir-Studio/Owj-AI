@@ -33,7 +33,10 @@ test('detects patterns and ranks upcoming exams', () => {
   const patterns = detectPatterns(input, data, {}, now);
   const priorities = rankPriorities(input, data, patterns, now);
   assert.equal(patterns.abandonedPlans, 1);
-  assert.ok(priorities.some(item => item.type === 'exam' && item.subject === 'Physics'));
+  const examPriority = priorities.find(item => item.type === 'exam' && item.subject === 'Physics');
+  assert.ok(examPriority);
+  assert.equal(examPriority.studyTargetProgressPercent, 30);
+  assert.equal('preparationPercent' in examPriority, false);
   assert.ok(priorities.some(item => item.type === 'subject_gap' && item.subject === 'Chemistry'));
 });
 
