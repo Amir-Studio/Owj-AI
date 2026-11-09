@@ -226,7 +226,7 @@ export function rankPriorities(input, data, patterns, now = new Date()) {
     const urgency = daysLeft <= 1 ? 100 : daysLeft <= 3 ? 92 : daysLeft <= 7 ? 78 : daysLeft <= 14 ? 58 : daysLeft <= 30 ? 38 : 18;
     const score = round(clamp(urgency * 0.62 + (100 - preparation) * 0.38, 0, 100));
     items.push({
-      id: 'exam-' + exam.id, type: 'exam', subject: exam.subject,
+      id: 'exam-' + exam.id, type: 'exam', reasonCode: 'EXAM_URGENCY_AND_PREPARATION_GAP', subject: exam.subject,
       title: exam.title || 'آمادگی آزمون ' + exam.subject, daysLeft,
       studyTargetProgressPercent: round(preparation), score,
       priority: score >= 80 ? 'critical' : score >= 65 ? 'high' : score >= 45 ? 'medium' : 'low',
@@ -248,7 +248,7 @@ export function rankPriorities(input, data, patterns, now = new Date()) {
     if (subject.sessions === 0 || (data.subjects.length > 1 && share < 0.12) || daysSince >= 7) {
       const score = round(clamp(35 + (subject.sessions === 0 ? 28 : 0) + (Number.isFinite(daysSince) ? Math.min(25, daysSince * 2) : 18) + (share < 0.12 ? 15 : 0), 0, 85));
       items.push({
-        id: 'subject-' + encodeURIComponent(subject.subject), type: 'subject_gap',
+        id: 'subject-' + encodeURIComponent(subject.subject), type: 'subject_gap', reasonCode: subject.sessions === 0 ? 'SUBJECT_NO_HISTORY' : 'SUBJECT_LOW_RECENCY_OR_SHARE',
         subject: subject.subject, title: 'بررسی وضعیت ' + subject.subject,
         score, priority: score >= 65 ? 'high' : score >= 45 ? 'medium' : 'low',
         reason: subject.sessions === 0
@@ -258,7 +258,7 @@ export function rankPriorities(input, data, patterns, now = new Date()) {
     }
   }
   if (patterns.signals.some(s => s.code === 'LOW_COMPLETION')) {
-    items.push({ id: 'habit-completion', type: 'habit', title: 'تنظیم واقع‌بینانه‌تر برنامه', score: 68, priority: 'high', reason: 'نرخ تکمیل جلسات پایین است؛ بهتر است حجم یا اندازهٔ بلوک‌های برنامه بازبینی شود.' });
+    items.push({ id: 'habit-completion', type: 'habit', reasonCode: 'LOW_SESSION_COMPLETION', title: 'تنظیم واقع‌بینانه‌تر برنامه', score: 68, priority: 'high', reason: 'نرخ تکمیل جلسات پایین است؛ بهتر است حجم یا اندازهٔ بلوک‌های برنامه بازبینی شود.' });
   }
   return items.sort((a, b) => b.score - a.score || a.title.localeCompare(b.title));
 }
@@ -292,6 +292,7 @@ export function proposeAdaptivePlan(input, data, priorities, patterns, now = new
     remaining -= minutes;
     return {
       subject, suggestedMinutes: minutes,
+      reasonCode: priorityScore(subject) >= 65 ? 'HIGH_PRIORITY_ALLOCATION' : 'BALANCED_SUBJECT_COVERAGE',
       reason: priorityScore(subject) >= 65
         ? 'زمان بیشتری گرفته چون در تحلیل فعلی اولویت بالاتری دارد.'
         : 'برای حفظ پیوستگی و تعادل مطالعه در برنامه قرار گرفته است.'
@@ -308,7 +309,7 @@ export function proposeAdaptivePlan(input, data, priorities, patterns, now = new
 export function buildRecommendations(data, patterns, trend, priorities, proposal) {
   const recommendations = [];
   const add = (type, priority, title, reason, action) => recommendations.push({
-    id: type + '-' + (recommendations.length + 1), type, priority, title, reason, action
+    id: type + '-' + (recommendations.length + 1), type, reasonCode: type.toUpperCase(), priority, title, reason, action
   });
   if (!data.overview.totalSessions) {
     add('getting_started', 'medium', 'شروع ثبت مطالعه', 'هنوز دادهٔ کافی برای تحلیل الگوی مطالعه وجود ندارد.', 'یک جلسهٔ مطالعه ثبت کن تا تحلیل از دادهٔ واقعی شروع شود.');
