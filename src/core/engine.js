@@ -1,4 +1,5 @@
 import { summarizeFeedback, getPlanFitAdjustment } from './feedback.js';
+import { createWeeklyForecast, settleWeeklyForecasts, summarizeForecastAccuracy } from './forecast.js';
 
 const DAY = 86_400_000;
 const ENGINE_VERSION = '0.3.0';
@@ -389,6 +390,9 @@ export function createOwjAI({ storage, clock = () => new Date() } = {}) {
     const trend = predictStudyTrend(data, old);
     const priorities = rankPriorities(input, data, patterns, now);
     const feedbackSummary = summarizeFeedback(old?.feedback ?? []);
+    const settledForecasts = settleWeeklyForecasts(old?.forecastHistory ?? [], input.sessions, now);
+    const forecastHistory = createWeeklyForecast(settledForecasts, trend, now).slice(-16);
+    const forecastAccuracy = summarizeForecastAccuracy(forecastHistory);
     const planProposal = proposeAdaptivePlan(input, data, priorities, patterns, now, old ?? {});
     const recommendations = buildRecommendations(data, patterns, trend, priorities, planProposal);
     const recentEvidence = input.sessions.filter(s => s.startedAt >= new Date(now.getTime() - 30 * DAY)).length;
@@ -398,7 +402,7 @@ export function createOwjAI({ storage, clock = () => new Date() } = {}) {
       id: makeId(), engineVersion: ENGINE_VERSION, createdAt: now.toISOString(),
       userId: raw.userId, overview: data.overview, subjects: data.subjects,
       patterns, trend, priorities, planProposal, recommendations, confidence,
-      feedback: feedbackSummary
+      feedback: feedbackSummary, forecastAccuracy
     };
     const currentWeek = weekKey(now);
     const snapshots = [...(old?.snapshots ?? []).filter(s => s.weekKey !== currentWeek), {
@@ -413,7 +417,7 @@ export function createOwjAI({ storage, clock = () => new Date() } = {}) {
     }]));
     await memoryStore.set(raw.userId, {
       schemaVersion: 3, engineVersion: ENGINE_VERSION, updatedAt: result.createdAt,
-      feedback: old?.feedback ?? [],
+      feedback: old?.feedback ?? [], forecastHistory,
       snapshots, subjects: subjectMemory,
       patterns: {
         preferredStudyHours: patterns.preferredStudyHours,
