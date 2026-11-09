@@ -63,6 +63,21 @@ test('model trains chronologically and evaluates on a held-out future period', (
   assert.equal(STUDY_NEURAL_INPUTS.length, 12);
 });
 
+test('a neural model that fails the holdout baseline falls back to the training mean', () => {
+  const trained = createStudyNeuralModel();
+  trained.train(makeExamples(), { seed: 31, epochs: 100 });
+  const saved = trained.exportModel();
+  saved.validation.beatsBaseline = false;
+  saved.validation.baseline.meanMinutes = 1234;
+  saved.validation.baseline.meanCompletionRate = 67.5;
+  const guarded = createStudyNeuralModel(saved);
+  const prediction = guarded.predict(makeExamples()[20].features);
+  assert.equal(prediction.status, 'baseline_fallback');
+  assert.equal(prediction.predictor, 'training_mean_baseline');
+  assert.equal(prediction.nextWeekMinutes, 1234);
+  assert.equal(prediction.nextWeekCompletionRate, 67.5);
+});
+
 test('saved model weights restore identical predictions', () => {
   const first = createStudyNeuralModel();
   first.train(makeExamples(), { seed: 17 });
