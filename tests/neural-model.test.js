@@ -53,3 +53,11 @@ test('saved neural weights can be restored for local inference', () => {
   const second = createStudyNeuralModel(saved);
   assert.deepEqual(second.predict(makeExamples()[20].features), first.predict(makeExamples()[20].features));
 });
+
+test('ignores malformed feature payloads without crashing training', () => {
+  const model = createStudyNeuralModel();
+  const valid = makeExamples(12);
+  const result = model.train([{ ...valid[0], features: null }, ...valid]);
+  assert.equal(result.status, 'trained');
+  assert.equal(result.acceptedExamples, 12);
+});
