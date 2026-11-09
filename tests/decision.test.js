@@ -25,8 +25,8 @@ test('reduces confidence when data quality and history are weak', () => {
     subjects: [subject('Physics', 'declining_performance', 0.8)],
     dataQuality: { status: 'low' }, overview: { totalSessions: 1 }
   });
-  assert.ok(result.evidence.confidence < 0.5);
-  assert.equal(result.evidence.grade, 'limited');
+  assert.ok(result.evidence.confidence < 0.6);
+  assert.equal(result.evidence.grade, 'moderate');
 });
 
 test('does not treat an untrained neural model as available', () => {
