@@ -1,6 +1,6 @@
 # Architecture
 
-Owj AI v0.3 is a deterministic, provider-independent JavaScript intelligence engine that runs inside Owj. It does not call a hosted LLM. The app explicitly passes profile, session, plan and exam records; the engine validates and normalizes them before analysis.
+Owj AI v0.4 is a deterministic, provider-independent JavaScript intelligence engine that runs inside Owj. It does not call a hosted LLM. The app explicitly passes profile, session, plan and exam records; the engine validates and normalizes them before analysis.
 
 ## Analysis pipeline
 
@@ -30,7 +30,7 @@ Memory is keyed by authenticated user ID and stores aggregate snapshots, subject
 This is an adaptive rules-and-statistics engine, not a trained neural network or general-purpose conversational model. It learns user-specific patterns by updating structured memory; it does not change model weights. More history improves pattern estimates but does not make study time equivalent to mastery. The engine currently focuses on study analytics and planning, not unrestricted textbook question answering.
 
 
-## Feedback and calibration (v0.3)
+## Feedback and calibration (v0.4)
 The app may explicitly record recommendation acceptance/usefulness and completed or abandoned plan outcomes through `recordFeedback`. The engine stores a bounded history (last 100 events) in the user's local memory and exposes aggregate feedback metrics. After at least three plan outcomes, repeated under-completion can reduce the next proposed capacity modestly; repeated reliable completion can increase it by at most five percent. Sparse feedback never changes capacity. This is a conservative heuristic, not a statistically calibrated model.
 
 Example:
@@ -50,3 +50,7 @@ The app should record outcomes only from explicit Owj plan/session events. Do no
 
 ## Forecast outcome tracking
 A weekly estimate is stored once for the next calendar week; repeated analyses during the same week do not silently rewrite it. After the target week ends, the engine compares the stored estimate with actual session minutes for that period and records absolute error and percentage error. Aggregate MAE/MAPE are exposed as `forecastAccuracy`. Fewer than three evaluated forecasts are labeled `collecting`, not a validated accuracy claim. Owj must pass the complete locally available session history for the target period when analyzing.
+
+
+## Assessment evidence
+The optional `assessments` input accepts percentage scores or score/maxScore pairs. Per-subject performance is calculated as a recency-weighted average (60-day exponential decay). Subjects below the 75% signal threshold receive an explainable assessment-gap priority. This is a study-planning signal, not a definitive mastery estimate; scores should be comparable and dated.
