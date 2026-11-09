@@ -2,9 +2,10 @@ import { summarizeFeedback, getPlanFitAdjustment } from './feedback.js';
 import { createWeeklyForecast, settleWeeklyForecasts, summarizeForecastAccuracy } from './forecast.js';
 import { createStudyNeuralModel } from '../neural/study-model.js';
 import { diagnoseSubjectLearning } from './diagnosis.js';
+import { buildHybridDecision } from './decision.js';
 
 const DAY = 86_400_000;
-const ENGINE_VERSION = '0.8.0';
+const ENGINE_VERSION = '0.9.0';
 const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
 const finite = (v, fallback = 0) => Number.isFinite(Number(v)) ? Number(v) : fallback;
 const round = n => Math.round(n);
@@ -610,6 +611,35 @@ export function createOwjAI({ storage, clock = () => new Date() } = {}) {
     const forecastAccuracy = summarizeForecastAccuracy(forecastHistory);
     const planProposal = proposeAdaptivePlan(input, data, priorities, patterns, now, old ?? {});
     const recommendations = buildRecommendations(data, patterns, trend, priorities, planProposal);
+    const neural = createStudyNeuralModel(old?.neuralModel);
+    const assessmentValues = data.subjects
+      .filter(subject => subject.recentPerformancePercent != null)
+      .map(subject => subject.recentPerformancePercent);
+    const upcomingExamDays = input.exams
+      .map(exam => Math.max(0, Math.ceil((exam.date - now) / DAY)));
+    const recentSessions = input.sessions.filter(session =>
+      session.startedAt >= new Date(now.getTime() - 7 * DAY) && session.actualMinutes > 0
+    );
+    const neuralFeatures = {
+      studyMinutes7d: data.overview.totalMinutes7d,
+      studyMinutesPrevious7d: data.overview.totalMinutesPrevious7d,
+      activeDays7d: data.overview.activeDays7d,
+      sessions7d: data.overview.sessions7d,
+      completionRate: data.overview.completionRate,
+      plannedVsActualPercent: data.overview.plannedVsActualPercent,
+      assessmentPerformance: assessmentValues.length
+        ? assessmentValues.reduce((sum, value) => sum + value, 0) / assessmentValues.length : null,
+      daysUntilNextExam: upcomingExamDays.length ? Math.min(...upcomingExamDays) : null,
+      consistencyScore: patterns.consistencyScore,
+      averageSessionMinutes: data.overview.averageSessionMinutes,
+      subjectsStudied7d: new Set(recentSessions.map(session => session.subject)).size,
+      missedSessions7d: recentSessions.filter(session => !session.completed).length
+    };
+    const neuralForecast = neural.predict(neuralFeatures);
+    const hybridDecision = buildHybridDecision({
+      subjects: data.subjects, priorities, patterns, trend, neuralForecast,
+      dataQuality, overview: data.overview, feedback: feedbackSummary
+    });
     const recentEvidence = input.sessions.filter(s => s.startedAt >= new Date(now.getTime() - 30 * DAY)).length;
     const evidenceCount = Math.min(1, recentEvidence / 20);
     const qualityFactor = dataQuality.status === 'high' ? 1
@@ -621,7 +651,7 @@ export function createOwjAI({ storage, clock = () => new Date() } = {}) {
     const result = {
       id: makeId(), engineVersion: ENGINE_VERSION, createdAt: now.toISOString(),
       userId: raw.userId, overview: data.overview, subjects: data.subjects, dataQuality,
-      patterns, trend, priorities, planProposal, recommendations, confidence,
+      patterns, trend, priorities, planProposal, recommendations, hybridDecision, confidence,
       confidenceType: 'heuristic_evidence_score',
       feedback: feedbackSummary, forecastAccuracy
     };
