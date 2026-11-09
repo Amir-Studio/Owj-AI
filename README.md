@@ -2,7 +2,7 @@
 
 **Owj AI** is the first-party, provider-independent intelligence engine for the Owj study planner.
 
-The v0.4 engine is written in JavaScript and runs inside the Owj app. It validates study records, detects personal routines, estimates weekly trends, ranks exam and subject priorities, proposes a workload-aware plan, and stores compact user-specific memory on the device, records explicit user feedback, adjusts future workload cautiously from repeated plan outcomes, audits incoming data quality, prioritizes subjects using recency-weighted assessment results, and scores forecasts only when the history-completeness watermark confirms the full period is available.
+The v0.5 engine is written in JavaScript and runs inside the Owj app. It validates study records, detects personal routines, estimates weekly trends, ranks exam and subject priorities, proposes a workload-aware plan, and stores compact user-specific memory on the device, records explicit user feedback, adjusts future workload cautiously from repeated plan outcomes, audits incoming data quality, prioritizes subjects using recency-weighted assessment evidence with sparse-sample shrinkage, and scores forecasts only when the history-completeness watermark confirms the full period is available.
 
 ## Product principles
 
@@ -78,4 +78,4 @@ console.log(result.recommendations);
 
 This is an adaptive rules-and-statistics engine, not a trained neural network or general-purpose conversational model. It learns user-specific patterns by updating structured memory; it does not change model weights. Its forecasts describe study activity, not guaranteed learning outcomes or exam scores. It currently focuses on study analytics and planning, not arbitrary textbook question answering.
 
-The user remains in control of every schedule change.
+The user remains in control of every schedule change. Assessment estimates are intentionally conservative: a small or stale sample is pulled toward a neutral baseline instead of being treated as a reliable mastery verdict.
