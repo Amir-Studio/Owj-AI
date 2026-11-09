@@ -50,7 +50,7 @@ test('neural model trains on chronological data and reports holdout metrics', ()
   assert.ok(prediction.nextWeekMinutes >= 0 && prediction.nextWeekMinutes <= 10080);
   assert.ok(prediction.nextWeekCompletionRate >= 0 && prediction.nextWeekCompletionRate <= 100);
   assert.ok(['promising_not_proven', 'low_or_unvalidated'].includes(prediction.reliability));
-  assert.equal(model.exportModel().schemaVersion, 2);
+  assert.equal(model.exportModel().schemaVersion, 3);
   assert.equal(STUDY_NEURAL_INPUTS.length, 12);
 });
 
