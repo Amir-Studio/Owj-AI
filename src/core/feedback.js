@@ -56,3 +56,40 @@ export function getPlanFitAdjustment(entries = []) {
         : 'نتایج اخیر با ظرفیت فعلی سازگارند؛ تغییری در ظرفیت اعمال نشده است.'
   };
 }
+
+/**
+ * Learns conservative, subject-specific plan sizing from completed outcomes.
+ * A subject needs at least three observations; sparse feedback never changes
+ * allocation. Factors affect relative proposal weights, not saved plans.
+ */
+export function getSubjectPlanFitAdjustments(entries = []) {
+  const outcomes = (Array.isArray(entries) ? entries : [])
+    .filter(item => item?.kind === 'plan_outcome' && typeof item.subject === 'string'
+      && item.subject.trim() && Number.isFinite(item.plannedMinutes) && item.plannedMinutes > 0)
+    .slice(-100);
+  const bySubject = new Map();
+  for (const item of outcomes) {
+    const subject = item.subject.trim();
+    if (!bySubject.has(subject)) bySubject.set(subject, []);
+    bySubject.get(subject).push(item);
+  }
+  return Object.fromEntries([...bySubject].map(([subject, records]) => {
+    const recent = records.slice(-8);
+    if (recent.length < 3) return [subject, {
+      factor: 1, sampleSize: recent.length, status: 'insufficient_feedback'
+    }];
+    const ratios = recent.map(item => clamp(
+      Number.isFinite(item.actualMinutes) ? item.actualMinutes / item.plannedMinutes : 0, 0, 2
+    ));
+    const typicalRatio = median(ratios);
+    const completionRate = recent.filter(item => item.completed === true).length / recent.length;
+    const factor = typicalRatio < 0.65 || completionRate < 0.4 ? 0.85
+      : typicalRatio < 0.8 || completionRate < 0.6 ? 0.92
+        : typicalRatio > 1.25 && completionRate >= 0.8 ? 1.03 : 1;
+    return [subject, {
+      factor, sampleSize: recent.length, status: 'subject_feedback_adjusted',
+      typicalActualToPlannedRatio: Math.round(typicalRatio * 100) / 100,
+      completionRatePercent: Math.round(completionRate * 100)
+    }];
+  }));
+}
