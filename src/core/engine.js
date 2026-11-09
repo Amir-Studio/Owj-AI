@@ -39,6 +39,11 @@ function normalizeInput(raw, now) {
     };
   }).filter(item => item.startedAt && item.startedAt <= now);
 
+  // Sync retries can deliver the same session more than once. Keep one
+  // canonical record per stable session ID so totals are not inflated.
+  const uniqueSessions = new Map();
+  for (const session of sessions) uniqueSessions.set(session.id, session);
+
   const plans = raw.plans.filter(item => item && typeof item === 'object').map((item, index) => ({
     id: String(item.id ?? index),
     subject: String(item.subject ?? '').trim(),
@@ -65,7 +70,7 @@ function normalizeInput(raw, now) {
       dailyAvailableMinutes: clamp(finite(profile.dailyAvailableMinutes, 240), 30, 24 * 60),
       subjects
     },
-    sessions,
+    sessions: [...uniqueSessions.values()],
     plans,
     exams
   };
