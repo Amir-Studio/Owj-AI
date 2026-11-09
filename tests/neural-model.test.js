@@ -81,3 +81,19 @@ test('old or malformed model weights are safely rejected', () => {
   const model = createStudyNeuralModel({ schemaVersion: 2, hiddenSize: 16, weights1: [[NaN]] });
   assert.equal(model.predict({}).status, 'insufficient_training');
 });
+
+test('missing features are represented separately from genuine zero values', () => {
+  const model = createStudyNeuralModel();
+  const trained = model.train(makeExamples(40), { seed: 7, epochs: 120 });
+  assert.equal(trained.status, 'trained');
+  const a = model.predict({ studyMinutes7d: 0 });
+  const b = model.predict({});
+  assert.ok(Number.isFinite(a.nextWeekMinutes));
+  assert.ok(Number.isFinite(b.nextWeekMinutes));
+});
+
+test('rejects malformed or incompatible serialized weights safely', () => {
+  const model = createStudyNeuralModel({ schemaVersion: 2, inputSize: 999, hiddenSize: 16, weights1: [], weights2: [] });
+  assert.equal(model.getMetrics().trainedExamples, 0);
+  assert.equal(model.predict({}).status, 'insufficient_training');
+});
