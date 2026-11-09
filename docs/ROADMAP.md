@@ -17,10 +17,12 @@
 - Add Persian UI copy and evidence display
 - Run tests against anonymized realistic scenarios
 
-## v0.3 — Quality
+## v0.3 — Quality (partially implemented)
 - Backtest and calibrate confidence
 - Better baselines and seasonality
-- User feedback on recommendation usefulness
+- [x] User feedback on recommendation acceptance/usefulness and plan outcomes
+- [x] Conservative feedback-based workload adjustment
+- [ ] Forecast backtesting and confidence calibration
 - Transparent memory review/reset screen
 - Better overload and repeated-plan-failure detection
 
