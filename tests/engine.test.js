@@ -28,6 +28,20 @@ test('aggregates valid sessions and excludes future records', () => {
   assert.equal(data.subjects.find(s => s.subject === 'Chemistry').sessions, 0);
 });
 
+test('deduplicates retried sessions by stable ID', () => {
+  const duplicated = {
+    userId: 'u1',
+    profile: { subjects: ['Math'] },
+    sessions: [
+      { id: 'same-session', subject: 'Math', actualMinutes: 50, startedAt: '2026-11-08T10:00:00Z' },
+      { id: 'same-session', subject: 'Math', actualMinutes: 50, startedAt: '2026-11-08T10:00:00Z' }
+    ]
+  };
+  const data = analyzeData(duplicated, now);
+  assert.equal(data.overview.totalSessions, 1);
+  assert.equal(data.overview.totalMinutes, 50);
+});
+
 test('detects patterns and ranks upcoming exams', () => {
   const data = analyzeData(input, now);
   const patterns = detectPatterns(input, data, {}, now);
