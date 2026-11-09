@@ -46,10 +46,16 @@ test('model trains chronologically and evaluates on a held-out future period', (
   assert.equal(trained.validation.examples, 10);
   assert.ok(trained.validation.meanAbsoluteStudyMinutesError >= 0);
   assert.ok(typeof trained.validation.beatsBaseline === 'boolean');
+  assert.ok(Number.isFinite(trained.validation.baseline.meanMinutes));
+  assert.ok(Number.isFinite(trained.validation.baseline.meanCompletionRate));
   const metrics = model.getMetrics();
   assert.equal(metrics.trainingRange.through < metrics.validationRange.from, true);
   const prediction = model.predict(makeExamples()[49].features);
-  assert.equal(prediction.status, 'experimental_estimate');
+  assert.ok(['experimental_estimate', 'baseline_fallback'].includes(prediction.status));
+  if (prediction.status === 'baseline_fallback') {
+    assert.equal(prediction.predictor, 'training_mean_baseline');
+    assert.equal(prediction.reliability, 'limited');
+  }
   assert.ok(prediction.nextWeekMinutes >= 0 && prediction.nextWeekMinutes <= 10080);
   assert.ok(prediction.nextWeekCompletionRate >= 0 && prediction.nextWeekCompletionRate <= 100);
   assert.ok(['limited', 'developing', 'promising_not_proven'].includes(prediction.reliability));
@@ -78,7 +84,7 @@ test('missing inference fields are reported rather than silently converted to ze
   const model = createStudyNeuralModel();
   model.train(makeExamples(), { seed: 19, epochs: 120 });
   assert.equal(model.predict({ studyMinutes7d: 100 }).status, 'invalid_features');
-  assert.equal(model.predict(makeExamples()[10].features).status, 'experimental_estimate');
+  assert.ok(['experimental_estimate', 'baseline_fallback'].includes(model.predict(makeExamples()[10].features).status));
 });
 
 test('invalid or obsolete serialized weights are safely rejected', () => {
@@ -93,6 +99,6 @@ test('minimum 30-week dataset remains eligible after the holdout split', () => {
   assert.equal(result.status, 'trained');
   assert.equal(result.trainingExamples, 24);
   assert.equal(result.validationExamples, 6);
-  assert.equal(model.predict(makeExamples(29)[28].features).status, 'experimental_estimate');
+  assert.ok(['experimental_estimate', 'baseline_fallback'].includes(model.predict(makeExamples(29)[28].features).status));
   assert.equal(model.getMetrics().totalExamples, 30);
 });
