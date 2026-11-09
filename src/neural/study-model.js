@@ -245,6 +245,7 @@ export function createStudyNeuralModel(savedModel = null) {
     const beatsBaseline = evaluation.meanAbsoluteStudyMinutesError <= baseline.meanAbsoluteStudyMinutesError
       && evaluation.meanAbsoluteCompletionRateError <= baseline.meanAbsoluteCompletionRateError;
     best.trainedExamples = training.length;
+    best.totalExamples = examples.length;
     best.epochs = completedEpochs;
     best.validation = { ...evaluation, baseline, beatsBaseline };
     best.trainingRange = { from: training[0].weekStart, through: training.at(-1).weekStart };
@@ -258,7 +259,7 @@ export function createStudyNeuralModel(savedModel = null) {
   }
 
   function predict(features = {}) {
-    if (model.trainedExamples < MIN_EXAMPLES || !model.validation) {
+    if ((model.totalExamples ?? model.trainedExamples) < MIN_EXAMPLES || !model.validation) {
       return { status: 'insufficient_training', reliability: 'unavailable', nextWeekMinutes: null, nextWeekCompletionRate: null };
     }
     if (!validFeatures(features)) return { status: 'invalid_features', reliability: 'unavailable', nextWeekMinutes: null, nextWeekCompletionRate: null };
@@ -292,7 +293,7 @@ export function createStudyNeuralModel(savedModel = null) {
     predict,
     exportModel: () => structuredClone(model),
     getMetrics: () => ({
-      trainedExamples: model.trainedExamples, epochs: model.epochs,
+      trainedExamples: model.trainedExamples, totalExamples: model.totalExamples ?? model.trainedExamples, epochs: model.epochs,
       validation: structuredClone(model.validation),
       trainingRange: model.trainingRange ?? null,
       validationRange: model.validationRange ?? null
