@@ -201,3 +201,41 @@ test('serializes concurrent feedback writes without losing events', async () => 
   assert.equal(summary.recommendationCount, 20);
   assert.equal(summary.acceptanceRatePercent, 50);
 });
+
+
+test('preserves feedback when analysis and feedback arrive concurrently', async () => {
+  const ai = createOwjAI({ clock: () => now });
+  const payload = { ...input, userId: 'u-race' };
+  await Promise.all([
+    ai.analyze(payload),
+    ai.recordFeedback({
+      userId: 'u-race', id: 'parallel-event', kind: 'recommendation',
+      recommendationId: 'rec-1', accepted: true
+    })
+  ]);
+  const memory = await ai.getMemory('u-race');
+  assert.equal(memory.feedback.length, 1);
+  assert.equal(memory.feedback[0].id, 'parallel-event');
+  assert.equal(memory.snapshots.length, 1);
+});
+
+test('recovers safely from malformed optional memory collections', async () => {
+  let saved = {
+    schemaVersion: 3,
+    snapshots: [null, { weekKey: 'broken', totalMinutes7d: 'not-a-number' }],
+    feedback: { invalid: true },
+    forecastHistory: [null, { targetStartAt: 'bad', targetEndAt: 'bad' }],
+    patterns: 'invalid'
+  };
+  const storage = {
+    async get() { return saved; },
+    async set(_userId, value) { saved = value; },
+    async remove() { saved = null; }
+  };
+  const ai = createOwjAI({ storage, clock: () => now });
+  const result = await ai.analyze({ ...input, userId: 'u-corrupt' });
+  assert.equal(result.feedback.totalEvents, 0);
+  assert.equal(saved.schemaVersion, 3);
+  assert.ok(Array.isArray(saved.snapshots));
+  assert.ok(Array.isArray(saved.forecastHistory));
+});
