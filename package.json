@@ -1,0 +1,1 @@
+{"name":"@owj/ai","version":"0.1.0","private":true,"type":"module","exports":{".":"./src/index.js"},"scripts":{"test":"node --test","lint":"node scripts/check-syntax.js"},"engines":{"node":">=18"}}
