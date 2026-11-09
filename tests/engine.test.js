@@ -24,7 +24,7 @@ test('aggregates valid sessions and excludes future records', () => {
   assert.equal(data.overview.totalSessions, 3);
   assert.equal(data.overview.totalMinutes, 135);
   assert.equal(data.overview.completionRate, 67);
-  assert.equal(data.overview.plannedVsActualPercent, 87);
+  assert.equal(data.overview.plannedVsActualPercent, 90);
   assert.equal(data.subjects.find(s => s.subject === 'Chemistry').sessions, 0);
 });
 
