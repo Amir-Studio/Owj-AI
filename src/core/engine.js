@@ -2,7 +2,7 @@ import { summarizeFeedback, getPlanFitAdjustment } from './feedback.js';
 import { createWeeklyForecast, settleWeeklyForecasts, summarizeForecastAccuracy } from './forecast.js';
 
 const DAY = 86_400_000;
-const ENGINE_VERSION = '0.4.0';
+const ENGINE_VERSION = '0.5.0';
 const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
 const finite = (v, fallback = 0) => Number.isFinite(Number(v)) ? Number(v) : fallback;
 const round = n => Math.round(n);
@@ -63,22 +63,33 @@ function normalizeInput(raw, now) {
     targetMinutes: clamp(finite(item.targetMinutes, 300), 30, 100_000)
   })).filter(item => item.date && item.date >= new Date(now.getTime() - DAY));
 
-  const assessments = (Array.isArray(raw.assessments) ? raw.assessments : [])
+  const normalizedAssessments = (Array.isArray(raw.assessments) ? raw.assessments : [])
     .filter(item => item && typeof item === 'object' && !Array.isArray(item))
     .map((item, index) => {
       const date = toDate(item.date ?? item.takenAt ?? item.createdAt);
       const directPercent = item.scorePercent == null ? null : Number(item.scorePercent);
       const score = item.score == null ? null : Number(item.score);
       const maxScore = item.maxScore == null ? null : Number(item.maxScore);
-      const scorePercent = Number.isFinite(directPercent) ? directPercent
-        : Number.isFinite(score) && Number.isFinite(maxScore) && maxScore > 0 ? score / maxScore * 100 : null;
+      const hasDirectPercent = Number.isFinite(directPercent) && directPercent >= 0 && directPercent <= 100;
+      const hasValidRatio = Number.isFinite(score) && Number.isFinite(maxScore)
+        && maxScore > 0 && score >= 0 && score <= maxScore;
+      const scorePercent = hasDirectPercent ? directPercent
+        : hasValidRatio ? score / maxScore * 100 : null;
       return {
         id: String(item.id ?? index),
         subject: String(item.subject ?? '').trim(),
-        date, scorePercent: Number.isFinite(scorePercent) ? clamp(scorePercent, 0, 100) : null,
+        date, scorePercent,
         type: String(item.type ?? 'assessment')
       };
     }).filter(item => item.subject && item.date && item.date <= now && item.scorePercent != null);
+  // Stable assessment IDs prevent sync retries from making the evidence look
+  // stronger than it really is. When duplicates conflict, retain the newest.
+  const assessmentById = new Map();
+  for (const assessment of normalizedAssessments) {
+    const previous = assessmentById.get(assessment.id);
+    if (!previous || assessment.date > previous.date) assessmentById.set(assessment.id, assessment);
+  }
+  const assessments = [...assessmentById.values()];
   const profile = raw.profile ?? {};
   const subjects = [...new Set((Array.isArray(profile.subjects) ? profile.subjects : [])
     .filter(value => value != null).map(value => String(typeof value === 'object' && value ? value.name ?? value.subject ?? '' : value).trim())
@@ -173,10 +184,11 @@ export function analyzeData(input, now = new Date()) {
     const daysOld = Math.max(0, (now - assessment.date) / DAY);
     const weight = Math.exp(-daysOld / 60);
     const entry = assessmentMap.get(assessment.subject) ?? {
-      weightedScore: 0, totalWeight: 0, count: 0, latestAssessmentAt: null
+      weightedScore: 0, totalWeight: 0, squaredWeight: 0, count: 0, latestAssessmentAt: null
     };
     entry.weightedScore += assessment.scorePercent * weight;
     entry.totalWeight += weight;
+    entry.squaredWeight += weight * weight;
     entry.count += 1;
     if (!entry.latestAssessmentAt || assessment.date > entry.latestAssessmentAt) entry.latestAssessmentAt = assessment.date;
     assessmentMap.set(assessment.subject, entry);
@@ -187,18 +199,37 @@ export function analyzeData(input, now = new Date()) {
   }
   const subjects = [...subjectMap.values()].map(item => {
     const assessment = assessmentMap.get(item.subject);
+    const observedPerformance = assessment?.totalWeight
+      ? assessment.weightedScore / assessment.totalWeight : null;
+    const effectiveAssessmentCount = assessment?.squaredWeight
+      ? assessment.totalWeight ** 2 / assessment.squaredWeight : 0;
+    const daysSinceAssessment = assessment?.latestAssessmentAt
+      ? Math.max(0, (now - assessment.latestAssessmentAt) / DAY) : Infinity;
+    // Shrink sparse or stale evidence toward a neutral 70% prior. This avoids
+    // treating one unusually easy/hard quiz as a definitive subject diagnosis.
+    const recencyFactor = Number.isFinite(daysSinceAssessment)
+      ? Math.exp(-daysSinceAssessment / 120) : 0;
+    const assessmentConfidence = assessment
+      ? clamp(effectiveAssessmentCount / (effectiveAssessmentCount + 2) * recencyFactor, 0, 0.85)
+      : 0;
+    const estimatedPerformance = observedPerformance == null
+      ? null : 70 + (observedPerformance - 70) * assessmentConfidence;
     return ({
-    subject: item.subject,
-    totalMinutes: round(item.totalMinutes),
-    sessions: item.sessions,
-    completedSessions: item.completedSessions,
-    activeDays: item.activeDays.size,
-    averageMinutes: item.sessions ? round(item.totalMinutes / item.sessions) : 0,
-    lastStudiedAt: item.lastStudiedAt?.toISOString() ?? null,
-    assessmentCount: assessment?.count ?? 0,
-    recentPerformancePercent: assessment ? round(assessment.weightedScore / assessment.totalWeight) : null,
-    latestAssessmentAt: assessment?.latestAssessmentAt?.toISOString() ?? null
-  }); }).sort((a, b) => b.totalMinutes - a.totalMinutes || a.subject.localeCompare(b.subject));
+      subject: item.subject,
+      totalMinutes: round(item.totalMinutes),
+      sessions: item.sessions,
+      completedSessions: item.completedSessions,
+      activeDays: item.activeDays.size,
+      averageMinutes: item.sessions ? round(item.totalMinutes / item.sessions) : 0,
+      lastStudiedAt: item.lastStudiedAt?.toISOString() ?? null,
+      assessmentCount: assessment?.count ?? 0,
+      recentPerformancePercent: observedPerformance == null ? null : round(observedPerformance),
+      estimatedPerformancePercent: estimatedPerformance == null ? null : round(estimatedPerformance),
+      assessmentConfidence: round(assessmentConfidence * 100) / 100,
+      effectiveAssessmentCount: round(effectiveAssessmentCount * 100) / 100,
+      latestAssessmentAt: assessment?.latestAssessmentAt?.toISOString() ?? null
+    });
+  }).sort((a, b) => b.totalMinutes - a.totalMinutes || a.subject.localeCompare(b.subject));
 
   const sessionPlanned = sessions.reduce((sum, s) => sum + s.plannedMinutes, 0);
   const sessionActual = sessions.reduce((sum, s) => sum + s.actualMinutes, 0);
@@ -331,19 +362,23 @@ export function rankPriorities(input, data, patterns, now = new Date()) {
   }
 
   for (const subject of data.subjects) {
-    if (subject.recentPerformancePercent != null && subject.recentPerformancePercent < 75) {
-      const daysSinceAssessment = subject.latestAssessmentAt
-        ? Math.max(0, (now - new Date(subject.latestAssessmentAt)) / DAY) : 0;
-      const score = round(clamp(35 + (75 - subject.recentPerformancePercent) * 1.2
-        + Math.min(10, daysSinceAssessment / 14), 35, 85));
+    const estimate = subject.estimatedPerformancePercent;
+    const evidenceConfidence = subject.assessmentConfidence ?? 0;
+    // Require a meaningful estimated gap and some recent evidence. Low-volume
+    // or stale assessments are deliberately prevented from dominating plans.
+    if (estimate != null && estimate < 65 && evidenceConfidence >= 0.2) {
+      const gap = Math.max(0, 70 - estimate);
+      const score = round(clamp(30 + gap * 0.9 + evidenceConfidence * 10, 30, 85));
       items.push({
         id: 'performance-' + encodeURIComponent(subject.subject),
         type: 'assessment_gap', reasonCode: 'LOW_ASSESSMENT_PERFORMANCE',
         subject: subject.subject, title: 'تقویت عملکرد در ' + subject.subject,
-        score, priority: score >= 65 ? 'high' : 'medium',
+        score, priority: score >= 65 ? 'high' : score >= 45 ? 'medium' : 'low',
         performancePercent: subject.recentPerformancePercent,
+        estimatedPerformancePercent: estimate,
+        assessmentConfidence: evidenceConfidence,
         assessmentCount: subject.assessmentCount,
-        reason: `میانگین وزنی نتایج آزمون‌های ثبت‌شده ${subject.recentPerformancePercent}٪ است؛ این درس برای تمرین هدفمند اولویت گرفته است.`
+        reason: `میانگین مشاهده‌شده ${subject.recentPerformancePercent}٪ و برآورد تعدیل‌شده با توجه به تعداد و تازگی آزمون‌ها ${estimate}٪ است؛ این نتیجه یک نشانهٔ قابل بازبینی است، نه حکم قطعی دربارهٔ تسلط.`
       });
     }
   }
