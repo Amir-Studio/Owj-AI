@@ -17,7 +17,7 @@
 - Add Persian UI copy and evidence display
 - Run tests against anonymized realistic scenarios
 
-## v0.3 — Quality (partially implemented)
+## v0.4 — Quality (partially implemented)
 - Backtest and calibrate confidence
 - Better baselines and seasonality
 - [x] User feedback on recommendation acceptance/usefulness and plan outcomes
@@ -31,3 +31,12 @@
 - Optional consent-based cross-device memory sync
 - Optional on-device ML only after measurable evaluation
 - Additional capabilities only when supported by data and tests
+
+
+## v0.4 quality and evidence improvements
+- [x] Gap-aware trend regression for missing snapshot weeks
+- [x] Data-quality diagnostics and confidence tempering
+- [x] Serialize same-user writes to prevent concurrent memory loss
+- [x] Require complete-history watermark before scoring forecasts
+- [x] Use recency-weighted assessment results in subject prioritization
+- [ ] Validate recommendation quality with anonymized opt-in pilot data
