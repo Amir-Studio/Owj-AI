@@ -1,5 +1,8 @@
 const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
 const average = values => values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+const isValidPlanOutcome = item => item?.kind === 'plan_outcome'
+  && Number.isFinite(item.plannedMinutes) && item.plannedMinutes > 0
+  && Number.isFinite(item.actualMinutes) && item.actualMinutes >= 0;
 const median = values => {
   if (!values.length) return null;
   const sorted = [...values].sort((a, b) => a - b);
@@ -11,7 +14,7 @@ export function summarizeFeedback(entries = []) {
   const events = Array.isArray(entries) ? entries : [];
   const recommendations = events.filter(item => item?.kind === 'recommendation' && typeof item.accepted === 'boolean');
   const rated = recommendations.filter(item => Number.isFinite(item.usefulness));
-  const outcomes = events.filter(item => item?.kind === 'plan_outcome' && Number.isFinite(item.plannedMinutes) && item.plannedMinutes > 0);
+  const outcomes = events.filter(isValidPlanOutcome);
   const ratios = outcomes.map(item => clamp(item.actualMinutes / item.plannedMinutes, 0, 2));
   return {
     totalEvents: events.length,
@@ -33,7 +36,7 @@ export function summarizeFeedback(entries = []) {
 
 export function getPlanFitAdjustment(entries = []) {
   const outcomes = (Array.isArray(entries) ? entries : [])
-    .filter(item => item?.kind === 'plan_outcome' && Number.isFinite(item.plannedMinutes) && item.plannedMinutes > 0)
+    .filter(isValidPlanOutcome)
     .slice(-8);
   if (outcomes.length < 3) {
     return { factor: 1, sampleSize: outcomes.length, status: 'insufficient_feedback', reason: 'برای تنظیم ظرفیت بر اساس نتیجهٔ برنامه، حداقل سه نتیجهٔ ثبت‌شده لازم است.' };
@@ -64,8 +67,7 @@ export function getPlanFitAdjustment(entries = []) {
  */
 export function getSubjectPlanFitAdjustments(entries = []) {
   const outcomes = (Array.isArray(entries) ? entries : [])
-    .filter(item => item?.kind === 'plan_outcome' && typeof item.subject === 'string'
-      && item.subject.trim() && Number.isFinite(item.plannedMinutes) && item.plannedMinutes > 0)
+    .filter(item => isValidPlanOutcome(item) && typeof item.subject === 'string' && item.subject.trim())
     .slice(-100);
   const bySubject = new Map();
   for (const item of outcomes) {
@@ -78,9 +80,7 @@ export function getSubjectPlanFitAdjustments(entries = []) {
     if (recent.length < 3) return [subject, {
       factor: 1, sampleSize: recent.length, status: 'insufficient_feedback'
     }];
-    const ratios = recent.map(item => clamp(
-      Number.isFinite(item.actualMinutes) ? item.actualMinutes / item.plannedMinutes : 0, 0, 2
-    ));
+    const ratios = recent.map(item => clamp(item.actualMinutes / item.plannedMinutes, 0, 2));
     const typicalRatio = median(ratios);
     const completionRate = recent.filter(item => item.completed === true).length / recent.length;
     const factor = typicalRatio < 0.65 || completionRate < 0.4 ? 0.85
