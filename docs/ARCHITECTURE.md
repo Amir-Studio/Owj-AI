@@ -1,6 +1,6 @@
 # Architecture
 
-Owj AI v0.9.5 combines a deterministic, provider-independent JavaScript intelligence engine that runs inside Owj. It does not call a hosted LLM. The app explicitly passes profile, session, plan and exam records; the engine validates and normalizes them before analysis.
+Owj AI v0.10.0 combines a deterministic, provider-independent JavaScript intelligence engine that runs inside Owj. It does not call a hosted LLM. The app explicitly passes profile, session, plan and exam records; the engine validates and normalizes them before analysis.
 
 ## Analysis pipeline
 
@@ -68,8 +68,8 @@ Training samples must be completed, chronological weekly records. Features are m
 This network is not trained at install time. The app must collect enough valid weekly examples for the individual user before a prediction is available. Synthetic tests do not establish real-world accuracy.
 
 
-## Outcome-driven personalization (v0.9.5)
+## Outcome-driven personalization (v0.10.0)
 
 Completed weekly forecasts are now used to estimate recent systematic bias. Calibration requires at least three completed forecast windows, uses the latest twelve valid outcomes, corrects the next estimate by the median signed error, and reduces reported trend confidence as recent absolute error grows. The empirical error range is descriptive, not a formal confidence interval. Incomplete target weeks are never used.
 
-Plan feedback is also grouped by subject. A subject needs at least three completed plan outcomes before its relative allocation weight can change; the calculation uses up to the latest eight outcomes for that subject. This changes only a future proposal's relative distribution, not the total available study capacity or a saved schedule. Sparse data leaves the subject weight unchanged. These are bounded heuristics, not proof of learning gains.
+Plan feedback is also grouped by subject. A subject needs at least three valid plan outcome records before its relative allocation weight can change; the calculation uses up to the latest eight outcomes for that subject. This changes only a future proposal's relative distribution, not the total available study capacity or a saved schedule. Sparse data leaves the subject weight unchanged. These are bounded heuristics, not proof of learning gains.
