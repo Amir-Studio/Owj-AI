@@ -3,3 +3,5 @@ export { createMemoryStorage, createBrowserMemoryStorage } from './memory/storag
 export { createStudyNeuralModel, STUDY_NEURAL_INPUTS } from './neural/study-model.js';
 
 export { diagnoseSubjectLearning } from './core/diagnosis.js';
+
+export { buildHybridDecision } from './core/decision.js';
