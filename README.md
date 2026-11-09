@@ -2,7 +2,7 @@
 
 **Owj AI** is the first-party, provider-independent intelligence engine for the Owj study planner.
 
-The v0.5 analytics engine is written in JavaScript and runs inside the Owj app. It validates study records, detects personal routines, estimates weekly trends, ranks exam and subject priorities, proposes a workload-aware plan, and stores compact user-specific memory on the device, records explicit user feedback, adjusts future workload cautiously from repeated plan outcomes, audits incoming data quality, prioritizes subjects using recency-weighted assessment evidence with sparse-sample shrinkage, and scores forecasts only when the history-completeness watermark confirms the full period is available.
+The v0.7 analytics engine is written in JavaScript and runs inside the Owj app. It validates study records, detects personal routines, estimates weekly trends, ranks exam and subject priorities, proposes a workload-aware plan, and stores compact user-specific memory on the device, records explicit user feedback, adjusts future workload cautiously from repeated plan outcomes, audits incoming data quality, prioritizes subjects using recency-weighted assessment evidence with sparse-sample shrinkage, and scores forecasts only when the history-completeness watermark confirms the full period is available.
 
 ## Product principles
 
@@ -46,7 +46,7 @@ npm test
 npm run lint
 ```
 
-The optional v0.7 neural module is a supervised feed-forward predictor (16 inputs, 16 hidden units, 2 outputs) with Adam training, missing-value indicators, chronological validation, and baseline comparison. It remains experimental until trained and evaluated on representative, consented student data. It does not replace the explainable analytics engine.\n\nThe repository is source-first. For integration, add this repository as a workspace package or import its `src/` entry point into the Owj React/Vite project.
+The optional v0.7 neural module is a supervised feed-forward predictor (24 encoded inputs, 20 hidden units, 2 outputs) with Adam training, missing-value indicators, chronological validation, and baseline comparison. It remains experimental until trained and evaluated on representative, consented student data. It does not replace the explainable analytics engine.\n\nThe repository is source-first. For integration, add this repository as a workspace package or import its `src/` entry point into the Owj React/Vite project.
 
 ```js
 import { createOwjAI, createBrowserMemoryStorage } from '@owj/ai';
