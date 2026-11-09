@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getSubjectPlanFitAdjustments } from '../src/index.js';
+import { getSubjectPlanFitAdjustments, proposeAdaptivePlan } from '../src/index.js';
 
 const outcome = (subject, plannedMinutes, actualMinutes, completed = true) => ({
   kind: 'plan_outcome', subject, plannedMinutes, actualMinutes, completed
@@ -39,4 +39,31 @@ test('caps evidence to the latest eight outcomes per subject', () => {
   const result = getSubjectPlanFitAdjustments(entries);
   assert.equal(result.Chemistry.sampleSize, 8);
   assert.equal(result.Chemistry.factor, 1);
+});
+
+test('feeds subject feedback into future proposal weights without changing saved plans', () => {
+  const input = {
+    profile: { dailyAvailableMinutes: 240, subjects: ['Math', 'Physics'] },
+    sessions: [], plans: [], exams: []
+  };
+  const data = {
+    overview: { totalSessions: 10, completionRate: 80 },
+    subjects: [{ subject: 'Math' }, { subject: 'Physics' }]
+  };
+  const patterns = { completionRate: 80, signals: [] };
+  const weakMathFeedback = [
+    outcome('Math', 60, 30, false),
+    outcome('Math', 60, 35, false),
+    outcome('Math', 60, 25, false),
+    outcome('Physics', 60, 60, true),
+    outcome('Physics', 60, 65, true),
+    outcome('Physics', 60, 55, true)
+  ];
+  const baseline = proposeAdaptivePlan(input, data, [], patterns);
+  const adapted = proposeAdaptivePlan(input, data, [], patterns, new Date('2026-01-01T00:00:00Z'), { feedback: weakMathFeedback });
+  const baselineMath = baseline.blocks.find(item => item.subject === 'Math').suggestedMinutes;
+  const adaptedMath = adapted.blocks.find(item => item.subject === 'Math').suggestedMinutes;
+  assert.ok(adaptedMath < baselineMath);
+  assert.equal(adapted.subjectFitAdjustments.Math.factor, 0.85);
+  assert.equal(adapted.blocks.reduce((sum, item) => sum + item.suggestedMinutes, 0), adapted.recommendedDailyMinutes);
 });
