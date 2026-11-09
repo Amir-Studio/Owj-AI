@@ -4,6 +4,8 @@ import {
   createOwjAI, analyzeData, detectPatterns, rankPriorities, predictStudyTrend
 } from '../src/index.js';
 
+import { createWeeklyForecast, settleWeeklyForecasts, summarizeForecastAccuracy } from '../src/core/forecast.js';
+
 const now = new Date('2026-11-09T12:00:00Z');
 const input = {
   userId: 'u1',
@@ -133,4 +135,24 @@ test('rejects malformed feedback and keeps feedback isolated by user', async () 
   await assert.rejects(() => ai.recordFeedback({ userId: 'u1', kind: 'plan_outcome', plannedMinutes: 0 }), /plannedMinutes/);
   await ai.recordFeedback({ userId: 'u1', kind: 'recommendation', accepted: true });
   assert.equal((await ai.getFeedbackSummary('u2')).totalEvents, 0);
+});
+
+
+test('stores a weekly forecast once and measures it against actual future sessions', () => {
+  const trend = { estimatedNextWeekMinutes: 420, confidence: 0.4, method: 'weekly_linear_trend' };
+  const history = createWeeklyForecast([], trend, now);
+  assert.equal(history.length, 1);
+  assert.equal(history[0].targetStartAt, '2026-11-16T00:00:00.000Z');
+  assert.equal(createWeeklyForecast(history, trend, new Date('2026-11-12T12:00:00Z')).length, 1);
+
+  const sessions = [
+    { startedAt: new Date('2026-11-16T08:00:00Z'), actualMinutes: 60 },
+    { startedAt: new Date('2026-11-20T08:00:00Z'), actualMinutes: 120 },
+    { startedAt: new Date('2026-11-23T08:00:00Z'), actualMinutes: 999 }
+  ];
+  const settled = settleWeeklyForecasts(history, sessions, new Date('2026-11-24T00:00:00Z'));
+  assert.equal(settled[0].actualMinutes, 180);
+  assert.equal(settled[0].absoluteErrorMinutes, 240);
+  assert.equal(summarizeForecastAccuracy(settled).evaluatedForecasts, 1);
+  assert.equal(summarizeForecastAccuracy(settled).status, 'collecting');
 });
