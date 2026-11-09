@@ -46,3 +46,7 @@ await owjAI.recordFeedback({
 ```
 
 The app should record outcomes only from explicit Owj plan/session events. Do not infer them by scanning other apps or device activity. Feedback remains per-user and local by default; the user should be able to review and clear it with the existing memory controls.
+
+
+## Forecast outcome tracking
+A weekly estimate is stored once for the next calendar week; repeated analyses during the same week do not silently rewrite it. After the target week ends, the engine compares the stored estimate with actual session minutes for that period and records absolute error and percentage error. Aggregate MAE/MAPE are exposed as `forecastAccuracy`. Fewer than three evaluated forecasts are labeled `collecting`, not a validated accuracy claim. Owj must pass the complete locally available session history for the target period when analyzing.
