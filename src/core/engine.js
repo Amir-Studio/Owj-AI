@@ -1,68 +1,378 @@
-const DAY=86400000;
-const date=v=>{if(!v)return null;const d=new Date(v);return Number.isNaN(d.getTime())?null:d};
-const avg=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:0;
-const round=n=>Math.round(n);
-const uid=()=>globalThis.crypto?.randomUUID?.()??`owj-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,9)}`;
+const DAY = 86_400_000;
+const ENGINE_VERSION = '0.2.0';
+const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
+const finite = (v, fallback = 0) => Number.isFinite(Number(v)) ? Number(v) : fallback;
+const round = n => Math.round(n);
+const average = values => values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+const median = values => {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+};
+const toDate = value => {
+  if (value == null || value === '') return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+const dayKey = value => value.toISOString().slice(0, 10);
+const weekKey = value => {
+  const d = new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  return d.toISOString().slice(0, 10);
+};
+const makeId = () => globalThis.crypto?.randomUUID?.() ?? `owj-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
 
-export function analyzeData(input,now=new Date()){
- const sessions=input.sessions.map((s,i)=>({id:String(s.id??i),subject:String(s.subject??'Unspecified'),minutes:Math.max(0,Number(s.actualMinutes??s.durationMinutes??s.minutes)||0),completed:s.completed!==false&&s.status!=='abandoned',date:date(s.startedAt??s.date??s.completedAt)})).filter(s=>s.date&&s.minutes>0&&s.date<=now);
- const recent=sessions.filter(s=>s.date>=new Date(now-DAY*7));
- const prev=sessions.filter(s=>s.date>=new Date(now-DAY*14)&&s.date<new Date(now-DAY*7));
- const map=new Map(); for(const s of sessions){const x=map.get(s.subject)??{subject:s.subject,totalMinutes:0,sessions:0,completed:0,last:0};x.totalMinutes+=s.minutes;x.sessions++;if(s.completed)x.completed++;x.last=Math.max(x.last,s.date.getTime());map.set(s.subject,x)}
- const subjects=[...map.values()].map(x=>({subject:x.subject,totalMinutes:round(x.totalMinutes),sessions:x.sessions,completedSessions:x.completed,averageMinutes:round(x.totalMinutes/x.sessions),lastStudiedAt:new Date(x.last).toISOString()})).sort((a,b)=>b.totalMinutes-a.totalMinutes);
- const plan=input.plans.reduce((a,p)=>a+(Number(p.plannedMinutes??p.durationMinutes)||0),0),actual=input.plans.reduce((a,p)=>a+(Number(p.actualMinutes)||0),0);
- return {subjects,overview:{totalSessions:sessions.length,completedSessions:sessions.filter(s=>s.completed).length,totalMinutes:round(sessions.reduce((a,s)=>a+s.minutes,0)),totalMinutes7d:round(recent.reduce((a,s)=>a+s.minutes,0)),totalMinutesPrevious7d:round(prev.reduce((a,s)=>a+s.minutes,0)),sessions7d:recent.length,activeDays7d:new Set(recent.map(s=>s.date.toISOString().slice(0,10))).size,completionRate:sessions.length?round(sessions.filter(s=>s.completed).length/sessions.length*100):0,averageSessionMinutes:round(avg(sessions.map(s=>s.minutes))),plannedVsActualPercent:plan>0?round(actual/plan*100):null}};
+function normalizeInput(raw, now) {
+  const sessions = raw.sessions.map((item, index) => {
+    const startedAt = toDate(item.startedAt ?? item.date ?? item.completedAt ?? item.createdAt);
+    const actualMinutes = clamp(finite(item.actualMinutes ?? item.durationMinutes ?? item.minutes), 0, 24 * 60);
+    const plannedMinutes = clamp(finite(item.plannedMinutes), 0, 24 * 60);
+    return {
+      id: String(item.id ?? index),
+      subject: String(item.subject ?? '').trim() || 'Unspecified',
+      startedAt,
+      actualMinutes,
+      plannedMinutes,
+      completed: item.completed !== false && item.status !== 'abandoned' && item.status !== 'missed',
+      status: String(item.status ?? '')
+    };
+  }).filter(item => item.startedAt && item.startedAt <= now);
+
+  const plans = raw.plans.map((item, index) => ({
+    id: String(item.id ?? index),
+    subject: String(item.subject ?? '').trim(),
+    plannedMinutes: clamp(finite(item.plannedMinutes ?? item.durationMinutes), 0, 24 * 60),
+    actualMinutes: clamp(finite(item.actualMinutes), 0, 24 * 60),
+    status: String(item.status ?? '')
+  }));
+
+  const exams = raw.exams.map((item, index) => ({
+    id: String(item.id ?? index),
+    subject: String(item.subject ?? '').trim() || 'General',
+    title: String(item.title ?? '').trim(),
+    date: toDate(item.date ?? item.examDate),
+    targetMinutes: clamp(finite(item.targetMinutes, 300), 30, 100_000)
+  })).filter(item => item.date && item.date >= new Date(now.getTime() - DAY));
+
+  const profile = raw.profile ?? {};
+  const subjects = [...new Set((Array.isArray(profile.subjects) ? profile.subjects : [])
+    .map(value => String(typeof value === 'object' && value ? value.name ?? value.subject ?? '' : value).trim())
+    .filter(Boolean))];
+  return {
+    userId: raw.userId,
+    profile: {
+      dailyAvailableMinutes: clamp(finite(profile.dailyAvailableMinutes, 240), 30, 24 * 60),
+      subjects
+    },
+    sessions,
+    plans,
+    exams
+  };
 }
 
-export function detectPatterns(input,data,memory={},now=new Date()){
- const sessions=input.sessions.map(s=>({...s,date:date(s.startedAt??s.date??s.completedAt),minutes:Number(s.actualMinutes??s.durationMinutes??s.minutes)||0})).filter(s=>s.date&&s.date<=now&&s.date>=new Date(now-DAY*30)&&s.minutes>0);
- const hours=new Map(),days=new Set();for(const s of sessions){hours.set(s.date.getHours(),(hours.get(s.date.getHours())??0)+s.minutes);days.add(s.date.toISOString().slice(0,10))}
- const preferredStudyHours=[...hours].sort((a,b)=>b[1]-a[1]).slice(0,3).map(([hour,minutes])=>({hour,minutes}));
- const consistencyScore=round(days.size/30*100),concentration=data.subjects.length>1?round(data.subjects[0].totalMinutes/Math.max(1,data.overview.totalMinutes)*100):data.subjects.length?100:0;
- const abandonedPlans=input.plans.filter(p=>p.status==='abandoned'||p.status==='missed').length;
- const signals=[];if(data.overview.totalSessions>=5&&data.overview.completionRate<60)signals.push({code:'LOW_COMPLETION',severity:'warning'});if(days.size>=3&&consistencyScore<25)signals.push({code:'LOW_CONSISTENCY',severity:'info'});if(data.subjects.length>1&&concentration>=65)signals.push({code:'SUBJECT_IMBALANCE',severity:'info'});if(abandonedPlans)signals.push({code:'ABANDONED_PLANS',severity:'warning'});
- const old=memory?.patterns?.consistencyScore;
- return {preferredStudyHours,activeDays30d:days.size,consistencyScore,consistencyChange:Number.isFinite(old)?consistencyScore-old:null,completionRate:data.overview.completionRate,subjectConcentrationPercent:concentration,abandonedPlans,signals};
+export function analyzeData(input, now = new Date()) {
+  const sessions = input.sessions.filter(s => s.startedAt && s.startedAt <= now);
+  const recent = sessions.filter(s => s.startedAt >= new Date(now.getTime() - 7 * DAY));
+  const previous = sessions.filter(s => s.startedAt >= new Date(now.getTime() - 14 * DAY) && s.startedAt < new Date(now.getTime() - 7 * DAY));
+  const subjectMap = new Map();
+  for (const session of sessions) {
+    const entry = subjectMap.get(session.subject) ?? {
+      subject: session.subject, totalMinutes: 0, sessions: 0, completedSessions: 0,
+      activeDays: new Set(), lastStudiedAt: null
+    };
+    entry.totalMinutes += session.actualMinutes;
+    entry.sessions += 1;
+    if (session.completed) entry.completedSessions += 1;
+    if (session.actualMinutes > 0) entry.activeDays.add(dayKey(session.startedAt));
+    if (!entry.lastStudiedAt || session.startedAt > entry.lastStudiedAt) entry.lastStudiedAt = session.startedAt;
+    subjectMap.set(session.subject, entry);
+  }
+  for (const subject of input.profile.subjects) {
+    if (!subjectMap.has(subject)) subjectMap.set(subject, {
+      subject, totalMinutes: 0, sessions: 0, completedSessions: 0,
+      activeDays: new Set(), lastStudiedAt: null
+    });
+  }
+  const subjects = [...subjectMap.values()].map(item => ({
+    subject: item.subject,
+    totalMinutes: round(item.totalMinutes),
+    sessions: item.sessions,
+    completedSessions: item.completedSessions,
+    activeDays: item.activeDays.size,
+    averageMinutes: item.sessions ? round(item.totalMinutes / item.sessions) : 0,
+    lastStudiedAt: item.lastStudiedAt?.toISOString() ?? null
+  })).sort((a, b) => b.totalMinutes - a.totalMinutes || a.subject.localeCompare(b.subject));
+
+  const sessionPlanned = sessions.reduce((sum, s) => sum + s.plannedMinutes, 0);
+  const sessionActual = sessions.reduce((sum, s) => sum + s.actualMinutes, 0);
+  const planPlanned = input.plans.reduce((sum, p) => sum + p.plannedMinutes, 0);
+  const planActual = input.plans.reduce((sum, p) => sum + p.actualMinutes, 0);
+  const planned = sessionPlanned || planPlanned;
+  const actual = sessionPlanned ? sessionActual : planActual;
+  const totalMinutes = sessions.reduce((sum, s) => sum + s.actualMinutes, 0);
+  const completedSessions = sessions.filter(s => s.completed).length;
+  const activeDays7d = new Set(recent.filter(s => s.actualMinutes > 0).map(s => dayKey(s.startedAt))).size;
+  const overview = {
+    totalSessions: sessions.length,
+    completedSessions,
+    totalMinutes: round(totalMinutes),
+    totalMinutes7d: round(recent.reduce((sum, s) => sum + s.actualMinutes, 0)),
+    totalMinutesPrevious7d: round(previous.reduce((sum, s) => sum + s.actualMinutes, 0)),
+    sessions7d: recent.length,
+    activeDays7d,
+    completionRate: sessions.length ? round(completedSessions / sessions.length * 100) : 0,
+    averageSessionMinutes: sessions.length ? round(average(sessions.map(s => s.actualMinutes))) : 0,
+    plannedVsActualPercent: planned > 0 ? round(actual / planned * 100) : null,
+    dataThrough: sessions.length ? sessions.reduce((latest, s) => s.startedAt > latest ? s.startedAt : latest, sessions[0].startedAt).toISOString() : null
+  };
+  return { subjects, overview };
 }
 
-export function predictStudyTrend(data,memory={}){
- const current=data.overview.totalMinutes7d,previous=data.overview.totalMinutesPrevious7d,snaps=(memory?.snapshots??[]).slice(-4).map(s=>Number(s.totalMinutes7d)).filter(Number.isFinite),baseline=snaps.length?avg(snaps):previous;
- const reference=baseline||previous;const direction=reference===0?'insufficient_data':current>reference*1.08?'increasing':current<reference*.92?'decreasing':'stable';
- return {direction,currentWeekMinutes:current,previousWeekMinutes:previous,changePercent:previous?round((current-previous)/previous*100):null,estimatedNextWeekMinutes:round(current*(direction==='increasing'?1.03:direction==='decreasing'?.97:1)),confidence:Math.min(.85,.2+data.overview.sessions7d*.025+snaps.length*.08),note:'برآورد آماری ساده است و پیش‌بینی قطعی محسوب نمی‌شود.'};
+export function detectPatterns(input, data, memory = {}, now = new Date()) {
+  const sessions = input.sessions.filter(s => s.startedAt && s.startedAt <= now && s.startedAt >= new Date(now.getTime() - 30 * DAY) && s.actualMinutes > 0);
+  const hourTotals = new Map();
+  const activeDays = new Set();
+  const weekdayTotals = new Map();
+  for (const session of sessions) {
+    const hour = session.startedAt.getHours();
+    hourTotals.set(hour, (hourTotals.get(hour) ?? 0) + session.actualMinutes);
+    const weekday = session.startedAt.getDay();
+    weekdayTotals.set(weekday, (weekdayTotals.get(weekday) ?? 0) + session.actualMinutes);
+    activeDays.add(dayKey(session.startedAt));
+  }
+  const preferredStudyHours = [...hourTotals].sort((a, b) => b[1] - a[1]).slice(0, 3)
+    .map(([hour, minutes]) => ({ hour, minutes, sharePercent: round(minutes / Math.max(1, sessions.reduce((sum, s) => sum + s.actualMinutes, 0)) * 100) }));
+  const preferredWeekdays = [...weekdayTotals].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([day, minutes]) => ({ day, minutes }));
+  const consistencyScore = round(activeDays.size / 30 * 100);
+  const studied = data.subjects.filter(s => s.totalMinutes > 0);
+  const total = Math.max(1, data.overview.totalMinutes);
+  const concentration = studied.length > 1 ? round(studied[0].totalMinutes / total * 100) : studied.length ? 100 : 0;
+  const abandonedPlans = input.plans.filter(p => ['abandoned', 'missed'].includes(p.status)).length;
+  const signals = [];
+  if (data.overview.totalSessions >= 5 && data.overview.completionRate < 60) signals.push({ code: 'LOW_COMPLETION', severity: 'warning' });
+  if (sessions.length >= 5 && activeDays.size < 4) signals.push({ code: 'LOW_CONSISTENCY', severity: 'info' });
+  if (studied.length > 1 && concentration >= 65) signals.push({ code: 'SUBJECT_IMBALANCE', severity: 'info' });
+  if (abandonedPlans >= 2) signals.push({ code: 'REPEATED_ABANDONMENT', severity: 'warning' });
+  const previousConsistency = memory?.patterns?.consistencyScore;
+  return {
+    preferredStudyHours, preferredWeekdays, activeDays30d: activeDays.size, consistencyScore,
+    consistencyChange: Number.isFinite(previousConsistency) ? consistencyScore - previousConsistency : null,
+    completionRate: data.overview.completionRate, subjectConcentrationPercent: concentration,
+    abandonedPlans, signals,
+    sampleSize: sessions.length,
+    reliability: sessions.length >= 20 ? 'high' : sessions.length >= 8 ? 'medium' : 'low'
+  };
 }
 
-export function rankPriorities(input,data,patterns,now=new Date()){
- const bySubject=new Map(data.subjects.map(s=>[s.subject,s])),items=[];
- for(const exam of input.exams){const d=date(exam.date??exam.examDate);if(!d||d<now)continue;const subject=String(exam.subject??'General'),daysLeft=Math.max(0,Math.ceil((d-now)/DAY)),studied=bySubject.get(subject)?.totalMinutes??0,gap=Math.max(0,100-Math.min(100,studied/Math.max(60,Number(exam.targetMinutes)||300)*100)),score=round(Math.max(0,100-daysLeft*4)*.65+gap*.35);items.push({id:String(exam.id??'exam-'+subject),type:'exam',subject,title:exam.title??'آزمون '+subject,daysLeft,score,priority:score>=75?'critical':score>=50?'high':score>=25?'medium':'low',reason:`${daysLeft} روز تا آزمون باقی مانده؛ آمادگی تخمینی از زمان مطالعه ثبت‌شده محاسبه شده است.`})}
- for(const s of data.subjects){const share=s.totalMinutes/Math.max(1,data.overview.totalMinutes);if(data.subjects.length>1&&share<.12){const score=round(35+(.12-share)*200);items.push({id:'subject-'+s.subject,type:'subject_gap',subject:s.subject,title:'مرور '+s.subject,score,priority:score>=50?'high':'medium',reason:'سهم این درس از زمان مطالعه ثبت‌شده نسبتاً پایین است.'})}}
- if(patterns.signals.some(s=>s.code==='LOW_COMPLETION'))items.push({id:'habit-completion',type:'habit',title:'واقع‌بینانه‌تر کردن برنامه',score:65,priority:'high',reason:'نرخ تکمیل جلسات پایین است؛ حجم برنامه نیاز به بازبینی دارد.'});return items.sort((a,b)=>b.score-a.score);
+export function predictStudyTrend(data, memory = {}) {
+  const current = data.overview.totalMinutes7d;
+  const previous = data.overview.totalMinutesPrevious7d;
+  const snapshots = (memory?.snapshots ?? []).filter(s => Number.isFinite(s.totalMinutes7d)).slice(-8);
+  const distinctWeeks = [...new Map(snapshots.map(s => [s.weekKey, s])).values()];
+  let direction = 'insufficient_data';
+  let estimatedNextWeekMinutes = null;
+  let confidence = 0.15;
+  let method = 'insufficient_history';
+  let slope = null;
+
+  if (distinctWeeks.length >= 3) {
+    const values = distinctWeeks.map(s => s.totalMinutes7d);
+    const xMean = (values.length - 1) / 2;
+    const yMean = average(values);
+    const denominator = values.reduce((sum, _, i) => sum + (i - xMean) ** 2, 0);
+    slope = denominator ? values.reduce((sum, y, i) => sum + (i - xMean) * (y - yMean), 0) / denominator : 0;
+    const predicted = clamp(current + slope, 0, Math.max(6000, current * 2 + 120));
+    estimatedNextWeekMinutes = round(predicted);
+    const relativeSlope = slope / Math.max(60, yMean);
+    direction = relativeSlope > 0.08 ? 'increasing' : relativeSlope < -0.08 ? 'decreasing' : 'stable';
+    confidence = clamp(0.35 + distinctWeeks.length * 0.06, 0.35, 0.8);
+    method = 'weekly_linear_trend';
+  } else if (previous > 0) {
+    const change = (current - previous) / previous;
+    direction = change > 0.08 ? 'increasing' : change < -0.08 ? 'decreasing' : 'stable';
+    estimatedNextWeekMinutes = round(current * (direction === 'increasing' ? 1.03 : direction === 'decreasing' ? 0.97 : 1));
+    confidence = 0.25;
+    method = 'week_over_week';
+  }
+  return {
+    direction, currentWeekMinutes: current, previousWeekMinutes: previous,
+    changePercent: previous > 0 ? round((current - previous) / previous * 100) : null,
+    estimatedNextWeekMinutes, slopeMinutesPerWeek: slope == null ? null : round(slope),
+    confidence: round(confidence * 100) / 100, method,
+    note: method === 'insufficient_history'
+      ? 'برای تشخیص روند، هنوز دادهٔ هفتگی کافی وجود ندارد.'
+      : 'این تخمین آماری است؛ تغییر ساعت مطالعه به‌تنهایی به معنی بهتر یا بدتر شدن یادگیری نیست.'
+  };
 }
 
-export function proposeAdaptivePlan(input,data,priorities,patterns,now=new Date()){
- const available=Math.max(30,Number(input.profile.dailyAvailableMinutes)||240),factor=patterns.completionRate>=85?1:patterns.completionRate>=65?.9:.75,capacity=Math.round(available*.8*factor),ordered=[...new Set([...priorities.filter(x=>x.subject).map(x=>x.subject),...data.subjects.map(x=>x.subject),...(input.profile.subjects??[]).map(String)])].slice(0,4);
- if(!ordered.length)return{status:'insufficient_data',recommendedDailyMinutes:capacity,blocks:[],rationale:'برای پیشنهاد برنامه، ابتدا درس‌ها و چند جلسه مطالعه ثبت شود.'};
- const block=Math.max(25,Math.min(90,Math.round(capacity/ordered.length/5)*5));let remaining=capacity;
- const blocks=ordered.map((subject,i)=>{const minutes=Math.min(remaining,i===0?Math.round(block*1.2):block);remaining-=minutes;return{subject,suggestedMinutes:Math.max(0,minutes),reason:priorities.some(p=>p.subject===subject)?'این درس در اولویت تحلیل است.':'برای حفظ تعادل مطالعاتی پیشنهاد شده است.'}}).filter(x=>x.suggestedMinutes>0);
- return{status:'proposal',createdAt:now.toISOString(),recommendedDailyMinutes:capacity,blocks,rationale:'پیشنهاد قابل ویرایش است و برنامه ذخیره‌شده بدون تأیید کاربر تغییر نمی‌کند.'};
+export function rankPriorities(input, data, patterns, now = new Date()) {
+  const bySubject = new Map(data.subjects.map(s => [s.subject, s]));
+  const items = [];
+  for (const exam of input.exams) {
+    const daysLeft = Math.max(0, Math.ceil((exam.date - now) / DAY));
+    const studied = bySubject.get(exam.subject)?.totalMinutes ?? 0;
+    const preparation = clamp(studied / exam.targetMinutes * 100, 0, 100);
+    const urgency = daysLeft <= 1 ? 100 : daysLeft <= 3 ? 92 : daysLeft <= 7 ? 78 : daysLeft <= 14 ? 58 : daysLeft <= 30 ? 38 : 18;
+    const score = round(clamp(urgency * 0.62 + (100 - preparation) * 0.38, 0, 100));
+    items.push({
+      id: 'exam-' + exam.id, type: 'exam', subject: exam.subject,
+      title: exam.title || 'آمادگی آزمون ' + exam.subject, daysLeft,
+      preparationPercent: round(preparation), score,
+      priority: score >= 80 ? 'critical' : score >= 65 ? 'high' : score >= 45 ? 'medium' : 'low',
+      reason: `${daysLeft} روز تا آزمون باقی مانده و بر اساس زمان مطالعهٔ ثبت‌شده، آمادگی تقریبی ${round(preparation)}٪ است.`
+    });
+  }
+
+  const studiedTotal = Math.max(1, data.subjects.reduce((sum, s) => sum + s.totalMinutes, 0));
+  const activeSubjectNames = new Set(input.sessions.filter(s => s.actualMinutes > 0).map(s => s.subject));
+  for (const subject of data.subjects) {
+    const share = subject.totalMinutes / studiedTotal;
+    const daysSince = subject.lastStudiedAt ? (now - new Date(subject.lastStudiedAt)) / DAY : Infinity;
+    if (subject.sessions === 0 || (data.subjects.length > 1 && share < 0.12) || daysSince >= 7) {
+      const score = round(clamp(35 + (subject.sessions === 0 ? 28 : 0) + (Number.isFinite(daysSince) ? Math.min(25, daysSince * 2) : 18) + (share < 0.12 ? 15 : 0), 0, 85));
+      items.push({
+        id: 'subject-' + encodeURIComponent(subject.subject), type: 'subject_gap',
+        subject: subject.subject, title: 'بررسی وضعیت ' + subject.subject,
+        score, priority: score >= 65 ? 'high' : score >= 45 ? 'medium' : 'low',
+        reason: subject.sessions === 0
+          ? 'برای این درس هنوز جلسه‌ای ثبت نشده؛ ابتدا مشخص کن واقعاً به زمان بیشتری نیاز دارد یا نه.'
+          : `سهم مطالعه ${round(share * 100)}٪ است و آخرین جلسهٔ ثبت‌شده ${Number.isFinite(daysSince) ? round(daysSince) + ' روز پیش' : 'نامشخص'} بوده است.`
+      });
+    }
+  }
+  if (patterns.signals.some(s => s.code === 'LOW_COMPLETION')) {
+    items.push({ id: 'habit-completion', type: 'habit', title: 'تنظیم واقع‌بینانه‌تر برنامه', score: 68, priority: 'high', reason: 'نرخ تکمیل جلسات پایین است؛ بهتر است حجم یا اندازهٔ بلوک‌های برنامه بازبینی شود.' });
+  }
+  return items.sort((a, b) => b.score - a.score || a.title.localeCompare(b.title));
 }
 
-export function buildRecommendations(data,patterns,trend,priorities,proposal){
- const out=[],add=(type,priority,title,reason,action)=>out.push({id:type+'-'+(out.length+1),type,priority,title,reason,action});
- if(!data.overview.totalSessions)add('getting_started','medium','ثبت اولین جلسه','هنوز داده‌ای برای تحلیل وجود ندارد.','یک جلسه مطالعه در اوج ثبت کن.');
- else{if(data.overview.completionRate<60&&data.overview.totalSessions>=5)add('planning','high','کمی از حجم برنامه کم کن','نرخ تکمیل جلسات پایین است.','چند روز برنامه سبک‌تر و قابل اجرا را امتحان کن.');if(trend.direction==='decreasing')add('trend','medium','روند مطالعه را بررسی کن','زمان مطالعه هفته اخیر کاهش داشته است.','علت تغییر را بررسی کن و فوراً حجم را افزایش نده.');if(patterns.signals.some(s=>s.code==='SUBJECT_IMBALANCE'))add('balance','medium','تعادل درس‌ها را بررسی کن','زمان مطالعه بین درس‌ها نامتوازن است.','با توجه به آزمون‌ها و تسلط، زمان درس‌ها را بازبینی کن.');}
- for(const p of priorities.slice(0,3))add('priority',p.priority,p.title,p.reason,'این مورد را در برنامه بعدی بررسی کن.');if(proposal.status==='proposal')add('plan_proposal','low','پیشنهاد برنامه آماده است',proposal.rationale,'پیشنهاد را بررسی و در صورت تمایل تأیید یا ویرایش کن.');return out;
+export function proposeAdaptivePlan(input, data, priorities, patterns, now = new Date()) {
+  const available = input.profile.dailyAvailableMinutes;
+  const completionFactor = data.overview.totalSessions < 4 ? 0.8
+    : patterns.completionRate >= 85 ? 1
+      : patterns.completionRate >= 65 ? 0.9 : 0.75;
+  const capacity = Math.max(25, Math.round(available * 0.8 * completionFactor / 5) * 5);
+  const candidates = [...new Set([
+    ...priorities.filter(item => item.subject).sort((a, b) => b.score - a.score).map(item => item.subject),
+    ...input.profile.subjects,
+    ...data.subjects.map(item => item.subject)
+  ])].slice(0, 6);
+  if (!candidates.length) return {
+    status: 'insufficient_data', recommendedDailyMinutes: capacity, blocks: [],
+    rationale: 'برای پیشنهاد برنامه، ابتدا نام درس‌ها یا چند جلسهٔ مطالعه ثبت شود.'
+  };
+
+  const priorityScore = subject => Math.max(0, ...priorities.filter(p => p.subject === subject).map(p => p.score));
+  const weights = candidates.map(subject => 1 + priorityScore(subject) / 50);
+  const totalWeight = weights.reduce((a, b) => a + b, 0);
+  let remaining = capacity;
+  const blocks = candidates.map((subject, index) => {
+    const proposed = index === candidates.length - 1
+      ? remaining
+      : Math.floor((capacity * weights[index] / totalWeight) / 5) * 5;
+    const minutes = Math.max(0, Math.min(remaining, proposed));
+    remaining -= minutes;
+    return {
+      subject, suggestedMinutes: minutes,
+      reason: priorityScore(subject) >= 65
+        ? 'زمان بیشتری گرفته چون در تحلیل فعلی اولویت بالاتری دارد.'
+        : 'برای حفظ پیوستگی و تعادل مطالعه در برنامه قرار گرفته است.'
+    };
+  }).filter(block => block.suggestedMinutes > 0);
+  return {
+    status: 'proposal', createdAt: now.toISOString(),
+    recommendedDailyMinutes: blocks.reduce((sum, block) => sum + block.suggestedMinutes, 0),
+    blocks,
+    rationale: 'این یک پیشنهاد قابل ویرایش است؛ برنامهٔ اصلی بدون تأیید کاربر تغییر نمی‌کند.'
+  };
 }
 
-export function createOwjAI({storage,clock=()=>new Date()}={}){
- const memoryStore=storage??(()=>{const m=new Map();return{get:async k=>m.get(k)??null,set:async(k,v)=>m.set(k,v),remove:async k=>m.delete(k)}})();
- const assert=id=>{if(typeof id!=='string'||!id.trim())throw new TypeError('input.userId is required')};
- async function getMemory(userId){assert(userId);return memoryStore.get(userId)}
- async function clearMemory(userId){assert(userId);return memoryStore.remove(userId)}
- async function analyze(raw){if(!raw||typeof raw!=='object')throw new TypeError('analyze expects an object');assert(raw.userId);for(const k of ['sessions','plans','exams'])if(raw[k]!=null&&!Array.isArray(raw[k]))throw new TypeError(k+' must be an array');const input={...raw,profile:raw.profile??{},sessions:raw.sessions??[],plans:raw.plans??[],exams:raw.exams??[]},now=raw.now?date(raw.now):clock();if(!now)throw new TypeError('now must be a valid date');const old=await memoryStore.get(raw.userId),data=analyzeData(input,now),patterns=detectPatterns(input,data,old,now),trend=predictStudyTrend(data,old),priorities=rankPriorities(input,data,patterns,now),planProposal=proposeAdaptivePlan(input,data,priorities,patterns,now),recommendations=buildRecommendations(data,patterns,trend,priorities,planProposal);
- const result={id:uid(),engineVersion:'0.1.0',createdAt:now.toISOString(),userId:raw.userId,overview:data.overview,subjects:data.subjects,patterns,trend,priorities,planProposal,recommendations,confidence:Math.min(1,Math.round((data.overview.totalSessions/20*.55+(old?.snapshots?.length ? .25 : 0)+(data.subjects.length ? .2 : 0))*100)/100)};
- const snapshots=[...(old?.snapshots??[]),{createdAt:result.createdAt,totalMinutes7d:data.overview.totalMinutes7d,sessions7d:data.overview.sessions7d,completionRate:data.overview.completionRate}].slice(-12);
- const subjectMemory=Object.fromEntries(data.subjects.map(s=>[s.subject,{totalMinutes:s.totalMinutes,sessions:s.sessions,lastStudiedAt:s.lastStudiedAt,averageMinutes:s.averageMinutes}]));
- await memoryStore.set(raw.userId,{schemaVersion:1,engineVersion:'0.1.0',updatedAt:result.createdAt,snapshots,subjects:subjectMemory,patterns:{preferredStudyHours:patterns.preferredStudyHours,consistencyScore:patterns.consistencyScore,completionRate:patterns.completionRate},importantInsights:recommendations.filter(r=>['high','critical'].includes(r.priority)).slice(0,8).map(({type,title,reason})=>({type,title,reason,createdAt:result.createdAt})),lastAnalysisId:result.id});return result;
- }
- return Object.freeze({analyze,getMemory,clearMemory,version:'0.1.0'});
+export function buildRecommendations(data, patterns, trend, priorities, proposal) {
+  const recommendations = [];
+  const add = (type, priority, title, reason, action) => recommendations.push({
+    id: type + '-' + (recommendations.length + 1), type, priority, title, reason, action
+  });
+  if (!data.overview.totalSessions) {
+    add('getting_started', 'medium', 'شروع ثبت مطالعه', 'هنوز دادهٔ کافی برای تحلیل الگوی مطالعه وجود ندارد.', 'یک جلسهٔ مطالعه ثبت کن تا تحلیل از دادهٔ واقعی شروع شود.');
+  } else {
+    if (patterns.reliability === 'low') add('data_quality', 'low', 'برای تحلیل دقیق‌تر داده جمع کن', 'تعداد جلسات ثبت‌شده هنوز کم است؛ نتیجه‌ها موقتی‌اند.', 'چند جلسهٔ واقعی دیگر ثبت کن و سپس روند را بررسی کن.');
+    if (patterns.signals.some(s => s.code === 'LOW_COMPLETION')) add('planning', 'high', 'اندازهٔ برنامه را بازبینی کن', 'نرخ تکمیل جلسات پایین است.', 'به‌جای افزایش فشار، حجم برنامه را واقع‌بینانه‌تر کن.');
+    if (trend.direction === 'decreasing') add('trend', 'medium', 'تغییر روند را بررسی کن', 'زمان مطالعهٔ هفتهٔ اخیر نسبت به مرجع کاهش داشته است.', 'علت تغییر را بررسی کن؛ صرفاً برای جبران، ساعت مطالعه را ناگهانی بالا نبر.');
+    if (patterns.signals.some(s => s.code === 'SUBJECT_IMBALANCE')) add('balance', 'medium', 'تعادل درس‌ها را بررسی کن', 'زمان ثبت‌شده بین درس‌ها نامتوازن است.', 'با توجه به آزمون‌های پیش رو و میزان تسلط، توزیع زمان را بازبینی کن.');
+  }
+  for (const item of priorities.slice(0, 3)) add('priority', item.priority, item.title, item.reason, 'این مورد را در برنامهٔ بعدی بررسی کن.');
+  if (proposal.status === 'proposal') add('plan_proposal', 'low', 'پیشنهاد برنامه آماده است', proposal.rationale, 'پیشنهاد را بررسی و در صورت تمایل ویرایش یا تأیید کن.');
+  return recommendations;
+}
+
+export function createOwjAI({ storage, clock = () => new Date() } = {}) {
+  const memoryStore = storage ?? (() => {
+    const map = new Map();
+    return {
+      get: async key => map.get(key) ?? null,
+      set: async (key, value) => map.set(key, value),
+      remove: async key => map.delete(key)
+    };
+  })();
+  const assertUserId = userId => {
+    if (typeof userId !== 'string' || !userId.trim()) throw new TypeError('input.userId is required');
+  };
+  async function getMemory(userId) {
+    assertUserId(userId);
+    return memoryStore.get(userId);
+  }
+  async function clearMemory(userId) {
+    assertUserId(userId);
+    return memoryStore.remove(userId);
+  }
+  async function analyze(raw) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new TypeError('analyze expects an object');
+    assertUserId(raw.userId);
+    for (const key of ['sessions', 'plans', 'exams']) {
+      if (raw[key] != null && !Array.isArray(raw[key])) throw new TypeError(key + ' must be an array');
+    }
+    const now = raw.now ? toDate(raw.now) : toDate(clock());
+    if (!now) throw new TypeError('now must be a valid date');
+    const input = normalizeInput({ ...raw, sessions: raw.sessions ?? [], plans: raw.plans ?? [], exams: raw.exams ?? [] }, now);
+    const old = await memoryStore.get(raw.userId);
+    const data = analyzeData(input, now);
+    const patterns = detectPatterns(input, data, old, now);
+    const trend = predictStudyTrend(data, old);
+    const priorities = rankPriorities(input, data, patterns, now);
+    const planProposal = proposeAdaptivePlan(input, data, priorities, patterns, now);
+    const recommendations = buildRecommendations(data, patterns, trend, priorities, planProposal);
+    const evidenceCount = Math.min(1, data.overview.totalSessions / 20);
+    const confidence = round(clamp(0.15 + evidenceCount * 0.55 + (data.subjects.length ? 0.1 : 0) + (old?.snapshots?.length >= 3 ? 0.1 : 0), 0.15, 0.9) * 100) / 100;
+    const result = {
+      id: makeId(), engineVersion: ENGINE_VERSION, createdAt: now.toISOString(),
+      userId: raw.userId, overview: data.overview, subjects: data.subjects,
+      patterns, trend, priorities, planProposal, recommendations, confidence
+    };
+    const currentWeek = weekKey(now);
+    const snapshots = [...(old?.snapshots ?? []).filter(s => s.weekKey !== currentWeek), {
+      weekKey: currentWeek, createdAt: result.createdAt,
+      totalMinutes7d: data.overview.totalMinutes7d,
+      sessions7d: data.overview.sessions7d,
+      completionRate: data.overview.completionRate
+    }].slice(-12);
+    const subjectMemory = Object.fromEntries(data.subjects.map(s => [s.subject, {
+      totalMinutes: s.totalMinutes, sessions: s.sessions,
+      lastStudiedAt: s.lastStudiedAt, averageMinutes: s.averageMinutes
+    }]));
+    await memoryStore.set(raw.userId, {
+      schemaVersion: 2, engineVersion: ENGINE_VERSION, updatedAt: result.createdAt,
+      snapshots, subjects: subjectMemory,
+      patterns: {
+        preferredStudyHours: patterns.preferredStudyHours,
+        consistencyScore: patterns.consistencyScore,
+        completionRate: patterns.completionRate
+      },
+      importantInsights: recommendations.filter(r => ['high', 'critical'].includes(r.priority))
+        .slice(0, 8).map(({ type, title, reason }) => ({ type, title, reason, createdAt: result.createdAt })),
+      lastAnalysisId: result.id
+    });
+    return result;
+  }
+  return Object.freeze({ analyze, getMemory, clearMemory, version: ENGINE_VERSION });
 }
