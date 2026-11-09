@@ -224,13 +224,13 @@ export function createStudyNeuralModel(savedModel = null) {
       }
       const learningRate = options.learningRate * Math.max(0.25, 1 - epoch / options.epochs);
       for (let start = 0; start < shuffled.length; start += options.batchSize) {
-        trainBatch(modelCandidate(), shuffled.slice(start, start + options.batchSize), optimizer, learningRate, options.gradientClip);
+        trainBatch(candidate, shuffled.slice(start, start + options.batchSize), optimizer, learningRate, options.gradientClip);
       }
       completedEpochs = epoch + 1;
-      const evaluation = score(candidateModel, validation);
+      const evaluation = score(candidate, validation);
       if (evaluation.normalizedMeanSquaredError < bestLoss - 1e-8) {
         bestLoss = evaluation.normalizedMeanSquaredError;
-        best = structuredClone(candidateModel);
+        best = structuredClone(candidate);
         stale = 0;
       } else stale++;
       if (stale >= 65) break;
