@@ -17,8 +17,7 @@ export function createMemoryStorage(adapter = memoryAdapter()) {
 
       try {
         const value = typeof raw === 'string' ? JSON.parse(raw) : raw;
-        // v1 is retained for safe migration from the first engine release.
-        // v2 is the current engine memory schema.
+        // Keep legacy schemas readable; v3 adds feedback and forecast history.
         return value && (value.schemaVersion === 1 || value.schemaVersion === 2 || value.schemaVersion === 3)
           ? value
           : null;
