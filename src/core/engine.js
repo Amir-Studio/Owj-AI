@@ -1,9 +1,10 @@
 import { summarizeFeedback, getPlanFitAdjustment } from './feedback.js';
 import { createWeeklyForecast, settleWeeklyForecasts, summarizeForecastAccuracy } from './forecast.js';
 import { createStudyNeuralModel } from '../neural/study-model.js';
+import { diagnoseSubjectLearning } from './diagnosis.js';
 
 const DAY = 86_400_000;
-const ENGINE_VERSION = '0.7.0';
+const ENGINE_VERSION = '0.8.0';
 const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
 const finite = (v, fallback = 0) => Number.isFinite(Number(v)) ? Number(v) : fallback;
 const round = n => Math.round(n);
@@ -254,7 +255,11 @@ export function analyzeData(input, now = new Date()) {
     plannedVsActualPercent: planned > 0 ? round(actual / planned * 100) : null,
     dataThrough: sessions.length ? sessions.reduce((latest, s) => s.startedAt > latest ? s.startedAt : latest, sessions[0].startedAt).toISOString() : null
   };
-  return { subjects, overview };
+  const diagnosedSubjects = subjects.map(subject => ({
+    ...subject,
+    learningDiagnosis: diagnoseSubjectLearning({ subject: subject.subject, sessions: input.sessions, assessments: input.assessments ?? [], now })
+  }));
+  return { subjects: diagnosedSubjects, overview };
 }
 
 export function detectPatterns(input, data, memory = {}, now = new Date()) {
