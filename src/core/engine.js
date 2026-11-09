@@ -433,7 +433,7 @@ export function proposeAdaptivePlan(input, data, priorities, patterns, now = new
     ...data.subjects.map(item => item.subject)
   ])].slice(0, 6);
   if (!candidates.length) return {
-    status: 'insufficient_data', recommendedDailyMinutes: capacity, blocks: [], feedbackAdjustment,
+    status: 'insufficient_data', recommendedDailyMinutes: capacity, blocks: [], feedbackAdjustment, subjectFitAdjustments,
     rationale: 'برای پیشنهاد برنامه، ابتدا نام درس‌ها یا چند جلسهٔ مطالعه ثبت شود.'
   };
 
@@ -612,8 +612,15 @@ export function createOwjAI({ storage, clock = () => new Date() } = {}) {
     const settledForecasts = settleWeeklyForecasts(old?.forecastHistory ?? [], input.sessions, now, toDate(raw.historyCompleteThrough));
     // Learn only from completed forecast windows; never calibrate against the
     // forecast currently being issued or an incomplete study-history period.
-    const forecastCalibration = calibrateWeeklyForecast(trend, settledForecasts);
-    const calibratedTrend = forecastCalibration.trend ?? trend;
+    const calibrationResult = calibrateWeeklyForecast(trend, settledForecasts);
+    const calibratedTrend = calibrationResult.trend ?? trend;
+    const forecastCalibration = {
+      status: calibrationResult.status,
+      evaluatedForecasts: calibrationResult.evaluatedForecasts,
+      biasCorrectionMinutes: calibrationResult.biasCorrectionMinutes,
+      meanAbsoluteErrorMinutes: calibrationResult.meanAbsoluteErrorMinutes,
+      rangeMinutes: calibrationResult.rangeMinutes
+    };
     const forecastHistory = createWeeklyForecast(settledForecasts, calibratedTrend, now).slice(-16);
     const forecastAccuracy = summarizeForecastAccuracy(forecastHistory);
     const planProposal = proposeAdaptivePlan(input, data, priorities, patterns, now, old ?? {});
