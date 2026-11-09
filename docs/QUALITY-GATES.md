@@ -2,7 +2,7 @@
 
 ## Feedback integrity
 
-A plan outcome is usable only when both `plannedMinutes` and `actualMinutes` are finite numeric values, the planned duration is greater than zero, and both values are within the supported 0–1440 minute daily range (planned duration: 1–1440). Missing or malformed measurements are rejected at the API boundary and ignored if encountered in legacy memory.
+A plan outcome is usable only when both `plannedMinutes` and `actualMinutes` are finite numeric values, the planned duration is greater than zero, and both values are within the supported 0–1440 minute daily range (planned duration: 1–1440). Missing or malformed measurements, or a missing boolean completion state, are rejected at the API boundary and ignored if encountered in legacy memory.
 
 Global and subject-level adaptation use only valid outcomes. Subject-level adaptation additionally requires a non-empty subject name and at least three observations. Up to the latest eight valid observations per subject are used. Sparse evidence leaves the allocation factor unchanged.
 
