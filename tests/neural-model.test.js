@@ -86,3 +86,13 @@ test('invalid or obsolete serialized weights are safely rejected', () => {
   assert.equal(model.getMetrics().trainedExamples, 0);
   assert.equal(model.predict({}).status, 'insufficient_training');
 });
+
+test('minimum 30-week dataset remains eligible after the holdout split', () => {
+  const model = createStudyNeuralModel();
+  const result = model.train(makeExamples(30), { seed: 23, epochs: 100 });
+  assert.equal(result.status, 'trained');
+  assert.equal(result.trainingExamples, 24);
+  assert.equal(result.validationExamples, 6);
+  assert.equal(model.predict(makeExamples(29).features).status, 'experimental_estimate');
+  assert.equal(model.getMetrics().totalExamples, 30);
+});
