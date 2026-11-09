@@ -2,7 +2,7 @@
 
 **Owj AI** is the first-party, provider-independent intelligence engine for the Owj study planner.
 
-The v0.7 analytics engine is written in JavaScript and runs inside the Owj app. It validates study records, detects personal routines, estimates weekly trends, ranks exam and subject priorities, proposes a workload-aware plan, and stores compact user-specific memory on the device, records explicit user feedback, adjusts future workload cautiously from repeated plan outcomes, audits incoming data quality, prioritizes subjects using recency-weighted assessment evidence with sparse-sample shrinkage, and scores forecasts only when the history-completeness watermark confirms the full period is available.
+The v0.8 analytics engine is written in JavaScript and runs inside the Owj app. It validates study records, detects personal routines, diagnoses subject-level learning signals from repeated assessments and practice exposure, estimates weekly trends, ranks exam and subject priorities, proposes a workload-aware plan, and stores compact user-specific memory on the device, records explicit user feedback, adjusts future workload cautiously from repeated plan outcomes, audits incoming data quality, prioritizes subjects using recency-weighted assessment evidence with sparse-sample shrinkage, and scores forecasts only when the history-completeness watermark confirms the full period is available.
 
 ## Product principles
 
@@ -81,3 +81,7 @@ The core analytics engine is deterministic and explainable. The optional neural 
 
 The user remains in control of every schedule change. Assessment estimates are intentionally conservative: a small or stale sample is pulled toward a neutral baseline instead of being treated as a reliable mastery verdict.
 \n## Neural forecasting\n\nThe core API exposes `trainNeuralModel(userId, weeklyExamples)`, `predictNeuralModel(userId, features)` and `getNeuralMetrics(userId)`. Models are persisted separately per user in local memory and survive routine analysis calls. See [the neural model guide](docs/NEURAL-MODEL.md) for the strict leakage-safe weekly label contract.\n
+
+## Subject diagnosis v0.8
+
+Each configured subject receives an evidence-backed diagnosis with a transparent evidence summary and a suggested next action. The engine distinguishes insufficient evidence, low practice exposure, possible concept gaps despite practice, review risk, declining assessment performance, monitoring, and maintenance. It avoids definitive claims from a single assessment. This layer is deterministic and explainable; it does not replace the experimental neural forecaster.
