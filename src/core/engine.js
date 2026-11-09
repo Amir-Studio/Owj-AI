@@ -565,9 +565,18 @@ export function createOwjAI({ storage, clock = () => new Date() } = {}) {
       entry.accepted = event.accepted;
       if (event.usefulness != null) entry.usefulness = clamp(round(finite(event.usefulness)), 1, 5);
     } else {
-      entry.plannedMinutes = clamp(finite(event.plannedMinutes), 0, 24 * 60);
-      entry.actualMinutes = clamp(finite(event.actualMinutes), 0, 24 * 60);
-      if (entry.plannedMinutes <= 0) throw new TypeError('plan outcome requires plannedMinutes > 0');
+      const plannedMinutes = Number(event.plannedMinutes);
+      const actualMinutes = Number(event.actualMinutes);
+      if (event.plannedMinutes == null || !Number.isFinite(plannedMinutes)
+        || plannedMinutes <= 0 || plannedMinutes > 24 * 60) {
+        throw new TypeError('plan outcome requires plannedMinutes between 1 and 1440');
+      }
+      if (event.actualMinutes == null || !Number.isFinite(actualMinutes)
+        || actualMinutes < 0 || actualMinutes > 24 * 60) {
+        throw new TypeError('plan outcome requires actualMinutes between 0 and 1440');
+      }
+      entry.plannedMinutes = plannedMinutes;
+      entry.actualMinutes = actualMinutes;
       entry.completed = event.completed === true;
       entry.subject = String(event.subject ?? '').trim();
     }
