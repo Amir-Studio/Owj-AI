@@ -13,6 +13,7 @@ const sigmoid = z => 1 / (1 + Math.exp(-clamp(z, -25, 25)));
 const tanh = z => Math.tanh(clamp(z, -15, 15));
 
 function encode(features = {}) {
+  if (!features || typeof features !== 'object' || Array.isArray(features)) features = {};
   const values = [];
   const missing = [];
   for (let i = 0; i < FEATURE_KEYS.length; i++) {
@@ -26,6 +27,7 @@ function encode(features = {}) {
 
 function validExample(item) {
   if (!item || typeof item !== 'object' || !item.features || typeof item.features !== 'object' || Array.isArray(item.features)) return false;
+  if (item.nextWeekMinutes == null || item.nextWeekMinutes === '' || item.completionRate == null || item.completionRate === '') return false;
   const minutes = Number(item.nextWeekMinutes);
   const completion = Number(item.completionRate);
   return Number.isFinite(minutes) && minutes >= 0 && minutes <= OUTPUT_SCALE
@@ -190,6 +192,7 @@ export function createStudyNeuralModel(savedModel = null) {
   let model = validModel(savedModel) ? structuredClone(savedModel) : initialize();
 
   function train(rawExamples, config = {}) {
+    if (!config || typeof config !== 'object' || Array.isArray(config)) config = {};
     if (!Array.isArray(rawExamples)) throw new TypeError('training examples must be an array');
     const examples = orderedExamples(rawExamples);
     const minimum = 12;
