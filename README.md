@@ -4,6 +4,8 @@
 
 The v0.10.0 hybrid decision engine is written in JavaScript and runs inside the Owj app. It validates study records, detects personal routines, diagnoses subject-level learning signals from repeated assessments and practice exposure, estimates weekly trends, ranks exam and subject priorities, proposes a workload-aware plan, and stores compact user-specific memory on the device, records explicit user feedback, adjusts future workload cautiously from validated plan outcomes, calibrates per-subject allocation from each subject's recent completion history, and corrects systematic weekly forecast bias from completed outcomes, audits incoming data quality, prioritizes subjects using recency-weighted assessment evidence with sparse-sample shrinkage, and scores forecasts only when the history-completeness watermark confirms the full period is available.
 
+See [quality gates and model limits](docs/QUALITY-GATES.md) for feedback validation rules, CI coverage, and the distinction between tested behavior and real-world model performance.
+
 ## Product principles
 
 - No OpenAI, Gemini, external LLM, or hosted model API dependency.
