@@ -1,6 +1,6 @@
 # Architecture
 
-Owj AI v0.4 is a deterministic, provider-independent JavaScript intelligence engine that runs inside Owj. It does not call a hosted LLM. The app explicitly passes profile, session, plan and exam records; the engine validates and normalizes them before analysis.
+Owj AI v0.5 is a deterministic, provider-independent JavaScript intelligence engine that runs inside Owj. It does not call a hosted LLM. The app explicitly passes profile, session, plan and exam records; the engine validates and normalizes them before analysis.
 
 ## Analysis pipeline
 
@@ -53,4 +53,4 @@ A weekly estimate is stored once for the next calendar week; repeated analyses d
 
 
 ## Assessment evidence
-The optional `assessments` input accepts percentage scores or score/maxScore pairs. Per-subject performance is calculated as a recency-weighted average (60-day exponential decay). Subjects below the 75% signal threshold receive an explainable assessment-gap priority. This is a study-planning signal, not a definitive mastery estimate; scores should be comparable and dated.
+The optional `assessments` input accepts percentage scores or score/maxScore pairs. Per-subject observed performance uses a 60-day recency-weighted average. A second estimate shrinks sparse or stale evidence toward a neutral 70% baseline using effective sample size and a 120-day freshness factor (confidence is capped at 0.85). Duplicate stable assessment IDs are collapsed, invalid scores are rejected, and low-performance priorities require both a meaningful estimated gap and minimum evidence confidence. This is an uncertainty-aware planning signal, not a definitive mastery estimate; scores should be comparable and dated.
