@@ -66,3 +66,10 @@ The optional neural forecaster is exposed through the core API as `trainNeuralMo
 Training samples must be completed, chronological weekly records. Features are measured at the end of a week; labels are measured in the following week. The forecaster requires at least 30 valid weeks, deduplicates weeks, reserves the latest 20% for temporal validation, reports MAE against a training-mean baseline, and does not claim a probability confidence score. See [NEURAL-MODEL.md](NEURAL-MODEL.md) for the exact schema and limits.
 
 This network is not trained at install time. The app must collect enough valid weekly examples for the individual user before a prediction is available. Synthetic tests do not establish real-world accuracy.
+
+
+## Outcome-driven personalization (v0.9.5)
+
+Completed weekly forecasts are now used to estimate recent systematic bias. Calibration requires at least three completed forecast windows, uses the latest twelve valid outcomes, corrects the next estimate by the median signed error, and reduces reported trend confidence as recent absolute error grows. The empirical error range is descriptive, not a formal confidence interval. Incomplete target weeks are never used.
+
+Plan feedback is also grouped by subject. A subject needs at least three completed plan outcomes before its relative allocation weight can change; the calculation uses up to the latest eight outcomes for that subject. This changes only a future proposal's relative distribution, not the total available study capacity or a saved schedule. Sparse data leaves the subject weight unchanged. These are bounded heuristics, not proof of learning gains.
