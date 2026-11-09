@@ -227,7 +227,7 @@ export function predictStudyTrend(data, memory = {}) {
   const current = data.overview.totalMinutes7d;
   const previous = data.overview.totalMinutesPrevious7d;
   const snapshots = (memory?.snapshots ?? [])
-    .filter(s => Number.isFinite(s.totalMinutes7d) && typeof s.weekKey === 'string' && !Number.isNaN(Date.parse(s.weekKey)))
+    .filter(s => s && Number.isFinite(s.totalMinutes7d) && typeof s.weekKey === 'string' && !Number.isNaN(Date.parse(s.weekKey)))
     .slice(-12);
   const distinctWeeks = [...new Map(snapshots.map(s => [s.weekKey, s])).values()]
     .sort((a, b) => Date.parse(a.weekKey) - Date.parse(b.weekKey));
@@ -431,8 +431,10 @@ export function createOwjAI({ storage, clock = () => new Date() } = {}) {
       entry.subject = String(event.subject ?? '').trim();
     }
     return withUserLock(event.userId, async () => {
-      const previous = await memoryStore.get(event.userId) ?? { schemaVersion: 3, snapshots: [], feedback: [] };
-      const feedback = [...(previous.feedback ?? []).filter(item => item.id !== entry.id), entry].slice(-100);
+      const stored = await memoryStore.get(event.userId);
+      const previous = stored && typeof stored === 'object' ? stored : { schemaVersion: 3, snapshots: [], feedback: [] };
+      const previousFeedback = Array.isArray(previous.feedback) ? previous.feedback : [];
+      const feedback = [...previousFeedback.filter(item => item && item.id !== entry.id), entry].slice(-100);
       await memoryStore.set(event.userId, { ...previous, schemaVersion: 3, engineVersion: ENGINE_VERSION, updatedAt: now.toISOString(), feedback });
       return summarizeFeedback(feedback);
     });
@@ -452,7 +454,14 @@ export function createOwjAI({ storage, clock = () => new Date() } = {}) {
     if (!now) throw new TypeError('now must be a valid date');
     return withUserLock(raw.userId, async () => {
     const input = normalizeInput({ ...raw, sessions: raw.sessions ?? [], plans: raw.plans ?? [], exams: raw.exams ?? [] }, now);
-    const old = await memoryStore.get(raw.userId);
+    const storedMemory = await memoryStore.get(raw.userId);
+    const old = {
+      ...(storedMemory && typeof storedMemory === 'object' ? storedMemory : {}),
+      snapshots: Array.isArray(storedMemory?.snapshots) ? storedMemory.snapshots : [],
+      feedback: Array.isArray(storedMemory?.feedback) ? storedMemory.feedback : [],
+      forecastHistory: Array.isArray(storedMemory?.forecastHistory)
+        ? storedMemory.forecastHistory.filter(item => item && typeof item === 'object') : []
+    };
     const dataQuality = assessDataQuality(raw.sessions ?? [], now);
     const data = analyzeData(input, now);
     const patterns = detectPatterns(input, data, old, now);
