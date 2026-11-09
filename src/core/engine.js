@@ -2,7 +2,7 @@ import { summarizeFeedback, getPlanFitAdjustment } from './feedback.js';
 import { createWeeklyForecast, settleWeeklyForecasts, summarizeForecastAccuracy } from './forecast.js';
 
 const DAY = 86_400_000;
-const ENGINE_VERSION = '0.3.0';
+const ENGINE_VERSION = '0.4.0';
 const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
 const finite = (v, fallback = 0) => Number.isFinite(Number(v)) ? Number(v) : fallback;
 const round = n => Math.round(n);
