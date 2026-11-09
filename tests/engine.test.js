@@ -49,6 +49,7 @@ test('detects patterns and ranks upcoming exams', () => {
   assert.equal(patterns.abandonedPlans, 1);
   const examPriority = priorities.find(item => item.type === 'exam' && item.subject === 'Physics');
   assert.ok(examPriority);
+  assert.equal(examPriority.reasonCode, 'EXAM_URGENCY_AND_PREPARATION_GAP');
   assert.equal(examPriority.studyTargetProgressPercent, 10);
   assert.equal('preparationPercent' in examPriority, false);
   assert.ok(priorities.some(item => item.type === 'subject_gap' && item.subject === 'Chemistry'));
@@ -77,6 +78,8 @@ test('engine persists isolated per-user memory and one snapshot per week', async
   const second = await ai.analyze(input);
   const memory = await ai.getMemory('u1');
   assert.ok(first.planProposal);
+  assert.ok(first.planProposal.blocks.every(block => typeof block.reasonCode === 'string'));
+  assert.ok(first.recommendations.every(item => typeof item.reasonCode === 'string'));
   assert.ok(Array.isArray(first.recommendations));
   assert.equal(memory.lastAnalysisId, second.id);
   assert.equal(memory.snapshots.length, 1);
