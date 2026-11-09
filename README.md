@@ -77,6 +77,7 @@ console.log(result.recommendations);
 
 ## Honest capability boundary
 
-The core analytics engine is deterministic and explainable. The optional neural module can learn model weights from correctly labeled weekly outcomes, but the repository does not include a production-trained model or real student dataset. It is not a general-purpose conversational model. Its forecasts describe study activity, not guaranteed learning outcomes or exam scores. It currently focuses on study analytics and planning, not arbitrary textbook question answering.
+The core analytics engine is deterministic and explainable. The optional neural module can learn model weights from correctly labeled weekly outcomes, but the repository does not include a production-trained model or real student dataset. It is not a general-purpose conversational model. Its forecasts describe study activity, not guaranteed learning outcomes or exam scores. It currently focuses on study analytics, behavioral forecasting and planning, not arbitrary textbook question answering.
 
 The user remains in control of every schedule change. Assessment estimates are intentionally conservative: a small or stale sample is pulled toward a neutral baseline instead of being treated as a reliable mastery verdict.
+\n## Neural forecasting\n\nThe core API exposes `trainNeuralModel(userId, weeklyExamples)`, `predictNeuralModel(userId, features)` and `getNeuralMetrics(userId)`. Models are persisted separately per user in local memory and survive routine analysis calls. See [the neural model guide](docs/NEURAL-MODEL.md) for the strict leakage-safe weekly label contract.\n
