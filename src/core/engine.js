@@ -390,6 +390,15 @@ export function createOwjAI({ storage, clock = () => new Date() } = {}) {
       remove: async key => map.delete(key)
     };
   })();
+  const userQueues = new Map();
+  const withUserLock = (userId, task) => {
+    const previous = userQueues.get(userId) ?? Promise.resolve();
+    const current = previous.catch(() => undefined).then(task);
+    userQueues.set(userId, current);
+    return current.finally(() => {
+      if (userQueues.get(userId) === current) userQueues.delete(userId);
+    });
+  };
   const assertUserId = userId => {
     if (typeof userId !== 'string' || !userId.trim()) throw new TypeError('input.userId is required');
   };
@@ -399,7 +408,7 @@ export function createOwjAI({ storage, clock = () => new Date() } = {}) {
   }
   async function clearMemory(userId) {
     assertUserId(userId);
-    return memoryStore.remove(userId);
+    return withUserLock(userId, () => memoryStore.remove(userId));
   }
   async function recordFeedback(event) {
     if (!event || typeof event !== 'object' || Array.isArray(event)) throw new TypeError('feedback event must be an object');
@@ -421,10 +430,12 @@ export function createOwjAI({ storage, clock = () => new Date() } = {}) {
       entry.completed = event.completed === true;
       entry.subject = String(event.subject ?? '').trim();
     }
-    const previous = await memoryStore.get(event.userId) ?? { schemaVersion: 3, snapshots: [], feedback: [] };
-    const feedback = [...(previous.feedback ?? []).filter(item => item.id !== entry.id), entry].slice(-100);
-    await memoryStore.set(event.userId, { ...previous, schemaVersion: 3, engineVersion: ENGINE_VERSION, updatedAt: now.toISOString(), feedback });
-    return summarizeFeedback(feedback);
+    return withUserLock(event.userId, async () => {
+      const previous = await memoryStore.get(event.userId) ?? { schemaVersion: 3, snapshots: [], feedback: [] };
+      const feedback = [...(previous.feedback ?? []).filter(item => item.id !== entry.id), entry].slice(-100);
+      await memoryStore.set(event.userId, { ...previous, schemaVersion: 3, engineVersion: ENGINE_VERSION, updatedAt: now.toISOString(), feedback });
+      return summarizeFeedback(feedback);
+    });
   }
   async function getFeedbackSummary(userId) {
     assertUserId(userId);
@@ -439,6 +450,7 @@ export function createOwjAI({ storage, clock = () => new Date() } = {}) {
     }
     const now = raw.now ? toDate(raw.now) : toDate(clock());
     if (!now) throw new TypeError('now must be a valid date');
+    return withUserLock(raw.userId, async () => {
     const input = normalizeInput({ ...raw, sessions: raw.sessions ?? [], plans: raw.plans ?? [], exams: raw.exams ?? [] }, now);
     const old = await memoryStore.get(raw.userId);
     const dataQuality = assessDataQuality(raw.sessions ?? [], now);
@@ -492,6 +504,7 @@ export function createOwjAI({ storage, clock = () => new Date() } = {}) {
       lastAnalysisId: result.id
     });
     return result;
+    });
   }
   return Object.freeze({ analyze, getMemory, clearMemory, recordFeedback, getFeedbackSummary, version: ENGINE_VERSION });
 }
