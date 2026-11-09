@@ -1,5 +1,6 @@
 import { summarizeFeedback, getPlanFitAdjustment } from './feedback.js';
 import { createWeeklyForecast, settleWeeklyForecasts, summarizeForecastAccuracy } from './forecast.js';
+import { createStudyNeuralModel } from '../neural/study-model.js';
 
 const DAY = 86_400_000;
 const ENGINE_VERSION = '0.5.0';
@@ -502,6 +503,45 @@ export function createOwjAI({ storage, clock = () => new Date() } = {}) {
     assertUserId(userId);
     return withUserLock(userId, () => memoryStore.remove(userId));
   }
+  async function trainNeuralModel(userId, examples, options = {}) {
+    assertUserId(userId);
+    if (!Array.isArray(examples)) throw new TypeError('examples must be an array');
+    return withUserLock(userId, async () => {
+      const stored = await memoryStore.get(userId);
+      const memory = stored && typeof stored === 'object' ? stored : { schemaVersion: 3, snapshots: [], feedback: [], forecastHistory: [] };
+      const neural = createStudyNeuralModel(memory.neuralModel);
+      const result = neural.train(examples, options);
+      if (result.status === 'trained') {
+        const now = toDate(clock());
+        await memoryStore.set(userId, {
+          ...memory,
+          schemaVersion: 3,
+          engineVersion: ENGINE_VERSION,
+          updatedAt: now.toISOString(),
+          neuralModel: neural.exportModel()
+        });
+      }
+      return {
+        status: result.status,
+        acceptedExamples: result.acceptedExamples ?? 0,
+        trainingExamples: result.trainingExamples ?? 0,
+        validationExamples: result.validationExamples ?? 0,
+        epochs: result.epochs ?? 0,
+        validation: result.validation ?? null
+      };
+    });
+  }
+  async function predictNeuralModel(userId, features) {
+    assertUserId(userId);
+    const stored = await memoryStore.get(userId);
+    const neural = createStudyNeuralModel(stored?.neuralModel);
+    return neural.predict(features);
+  }
+  async function getNeuralMetrics(userId) {
+    assertUserId(userId);
+    const stored = await memoryStore.get(userId);
+    return createStudyNeuralModel(stored?.neuralModel).getMetrics();
+  }
   async function recordFeedback(event) {
     if (!event || typeof event !== 'object' || Array.isArray(event)) throw new TypeError('feedback event must be an object');
     assertUserId(event.userId);
@@ -607,5 +647,5 @@ export function createOwjAI({ storage, clock = () => new Date() } = {}) {
     return result;
     });
   }
-  return Object.freeze({ analyze, getMemory, clearMemory, recordFeedback, getFeedbackSummary, version: ENGINE_VERSION });
+  return Object.freeze({ analyze, getMemory, clearMemory, recordFeedback, getFeedbackSummary, trainNeuralModel, predictNeuralModel, getNeuralMetrics, version: ENGINE_VERSION });
 }
