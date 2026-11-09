@@ -79,6 +79,54 @@ function normalizeInput(raw, now) {
   };
 }
 
+export function assessDataQuality(rawSessions = [], now = new Date()) {
+  const sessions = Array.isArray(rawSessions) ? rawSessions : [];
+  const seenIds = new Set();
+  let invalidRecords = 0;
+  let futureRecords = 0;
+  let duplicateRecords = 0;
+  let missingStableIds = 0;
+  let validRecords = 0;
+
+  for (const item of sessions) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      invalidRecords += 1;
+      continue;
+    }
+    const startedAt = toDate(item.startedAt ?? item.date ?? item.completedAt ?? item.createdAt);
+    const rawMinutes = item.actualMinutes ?? item.durationMinutes ?? item.minutes;
+    const minutes = Number(rawMinutes);
+    if (!startedAt || rawMinutes == null || !Number.isFinite(minutes) || minutes < 0) {
+      invalidRecords += 1;
+      continue;
+    }
+    if (startedAt > now) {
+      futureRecords += 1;
+      continue;
+    }
+    validRecords += 1;
+    if (item.id == null || String(item.id).trim() === '') {
+      missingStableIds += 1;
+    } else {
+      const id = String(item.id);
+      if (seenIds.has(id)) duplicateRecords += 1;
+      seenIds.add(id);
+    }
+  }
+
+  const accepted = Math.max(0, validRecords - duplicateRecords);
+  const total = sessions.length;
+  const usablePercent = total ? round(accepted / total * 100) : null;
+  const status = total === 0 ? 'no_data'
+    : usablePercent >= 95 && missingStableIds === 0 ? 'high'
+      : usablePercent >= 80 ? 'medium' : 'low';
+  return {
+    status, totalRecords: total, usableRecords: accepted,
+    invalidRecords, futureRecords, duplicateRecords, missingStableIds,
+    usablePercent
+  };
+}
+
 export function analyzeData(input, now = new Date()) {
   input = normalizeInput({ ...input, sessions: input.sessions ?? [], plans: input.plans ?? [], exams: input.exams ?? [] }, now);
   const sessions = input.sessions.filter(s => s.startedAt && s.startedAt <= now);
@@ -393,6 +441,7 @@ export function createOwjAI({ storage, clock = () => new Date() } = {}) {
     if (!now) throw new TypeError('now must be a valid date');
     const input = normalizeInput({ ...raw, sessions: raw.sessions ?? [], plans: raw.plans ?? [], exams: raw.exams ?? [] }, now);
     const old = await memoryStore.get(raw.userId);
+    const dataQuality = assessDataQuality(raw.sessions ?? [], now);
     const data = analyzeData(input, now);
     const patterns = detectPatterns(input, data, old, now);
     const trend = predictStudyTrend(data, old);
@@ -408,7 +457,7 @@ export function createOwjAI({ storage, clock = () => new Date() } = {}) {
     const confidence = round(clamp(0.15 + evidenceCount * 0.55 + (data.subjects.length ? 0.1 : 0) + (old?.snapshots?.length >= 3 ? 0.1 : 0), 0.15, 0.9) * 100) / 100;
     const result = {
       id: makeId(), engineVersion: ENGINE_VERSION, createdAt: now.toISOString(),
-      userId: raw.userId, overview: data.overview, subjects: data.subjects,
+      userId: raw.userId, overview: data.overview, subjects: data.subjects, dataQuality,
       patterns, trend, priorities, planProposal, recommendations, confidence,
       feedback: feedbackSummary, forecastAccuracy
     };
