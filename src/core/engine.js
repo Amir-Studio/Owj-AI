@@ -26,7 +26,7 @@ export function detectPatterns(input,data,memory={},now=new Date()){
 }
 
 export function predictStudyTrend(data,memory={}){
- const current=data.overview.totalMinutes7d,previous=data.overview.totalMinutesPrevious7d,snaps=(memory.snapshots??[]).slice(-4).map(s=>Number(s.totalMinutes7d)).filter(Number.isFinite),baseline=snaps.length?avg(snaps):previous;
+ const current=data.overview.totalMinutes7d,previous=data.overview.totalMinutesPrevious7d,snaps=(memory?.snapshots??[]).slice(-4).map(s=>Number(s.totalMinutes7d)).filter(Number.isFinite),baseline=snaps.length?avg(snaps):previous;
  const reference=baseline||previous;const direction=reference===0?'insufficient_data':current>reference*1.08?'increasing':current<reference*.92?'decreasing':'stable';
  return {direction,currentWeekMinutes:current,previousWeekMinutes:previous,changePercent:previous?round((current-previous)/previous*100):null,estimatedNextWeekMinutes:round(current*(direction==='increasing'?1.03:direction==='decreasing'?.97:1)),confidence:Math.min(.85,.2+data.overview.sessions7d*.025+snaps.length*.08),note:'برآورد آماری ساده است و پیش‌بینی قطعی محسوب نمی‌شود.'};
 }
