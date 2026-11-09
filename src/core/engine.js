@@ -454,11 +454,17 @@ export function createOwjAI({ storage, clock = () => new Date() } = {}) {
     const recommendations = buildRecommendations(data, patterns, trend, priorities, planProposal);
     const recentEvidence = input.sessions.filter(s => s.startedAt >= new Date(now.getTime() - 30 * DAY)).length;
     const evidenceCount = Math.min(1, recentEvidence / 20);
-    const confidence = round(clamp(0.15 + evidenceCount * 0.55 + (data.subjects.length ? 0.1 : 0) + (old?.snapshots?.length >= 3 ? 0.1 : 0), 0.15, 0.9) * 100) / 100;
+    const qualityFactor = dataQuality.status === 'high' ? 1
+      : dataQuality.status === 'medium' ? 0.85
+        : dataQuality.status === 'low' ? 0.65 : 0.4;
+    const rawEvidenceScore = 0.15 + evidenceCount * 0.55
+      + (data.subjects.length ? 0.1 : 0) + (old?.snapshots?.length >= 3 ? 0.1 : 0);
+    const confidence = round(clamp(rawEvidenceScore * qualityFactor, 0.1, 0.9) * 100) / 100;
     const result = {
       id: makeId(), engineVersion: ENGINE_VERSION, createdAt: now.toISOString(),
       userId: raw.userId, overview: data.overview, subjects: data.subjects, dataQuality,
       patterns, trend, priorities, planProposal, recommendations, confidence,
+      confidenceType: 'heuristic_evidence_score',
       feedback: feedbackSummary, forecastAccuracy
     };
     const currentWeek = weekKey(now);
