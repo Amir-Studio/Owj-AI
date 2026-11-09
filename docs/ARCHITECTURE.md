@@ -1,6 +1,6 @@
 # Architecture
 
-Owj AI v0.7 combines a deterministic, provider-independent JavaScript intelligence engine that runs inside Owj. It does not call a hosted LLM. The app explicitly passes profile, session, plan and exam records; the engine validates and normalizes them before analysis.
+Owj AI v0.9.1 combines a deterministic, provider-independent JavaScript intelligence engine that runs inside Owj. It does not call a hosted LLM. The app explicitly passes profile, session, plan and exam records; the engine validates and normalizes them before analysis.
 
 ## Analysis pipeline
 
@@ -57,12 +57,12 @@ The optional `assessments` input accepts percentage scores or score/maxScore pai
 
 
 ## Optional neural predictor (v0.7)
-The package also exports an experimental supervised neural predictor. It uses an 12-feature study snapshot plus 12 missingness indicators, a 20-unit hidden layer, and two outputs (next-week study minutes and plan completion). Training uses Adam, gradient clipping, shuffled mini-batches, and a chronological holdout when at least 20 labeled weeks exist. Validation compares both outputs against a baseline computed from training labels only. This component is optional and does not currently drive the deterministic plan proposal. It must not be treated as reliable until real, consented data demonstrates that it beats the baseline on later unseen weeks.
+The package also exports an experimental supervised neural predictor. It uses a 12-feature study snapshot plus 12 missingness indicators, a 20-unit hidden layer, and two outputs (next-week study minutes and plan completion). Training uses Adam, gradient clipping, shuffled mini-batches, early stopping, and a chronological 80/20 holdout with at least 30 valid labeled weeks. Validation compares both outputs against a baseline computed from training labels only. Inference exposes the neural estimate only when it matches or beats that baseline on both held-out targets; otherwise it returns the training-mean baseline and the hybrid decision layer ignores the neural signal. Real-world usefulness still requires evaluation on consented, representative data.
 
 
 ## Neural forecasting (v0.7)
 The optional neural forecaster is exposed through the core API as `trainNeuralModel(userId, examples)`, `predictNeuralModel(userId, features)`, and `getNeuralMetrics(userId)`. It uses a 24-20-2 feed-forward network and predicts next-week study activity and plan completion only. Each model is stored inside that user's memory envelope and is preserved during normal analysis and feedback writes. Clearing a user's memory also clears their neural weights.
 
-Training samples must be completed, chronological weekly records. Features are measured at the end of a week; labels are measured in the following week. The forecaster enforces a minimum sample count, deduplicates weeks, reserves the latest 20% for temporal validation, reports MAE against a training-mean baseline, and does not claim a probability confidence score. See [NEURAL-MODEL.md](NEURAL-MODEL.md) for the exact schema and limits.
+Training samples must be completed, chronological weekly records. Features are measured at the end of a week; labels are measured in the following week. The forecaster requires at least 30 valid weeks, deduplicates weeks, reserves the latest 20% for temporal validation, reports MAE against a training-mean baseline, and does not claim a probability confidence score. See [NEURAL-MODEL.md](NEURAL-MODEL.md) for the exact schema and limits.
 
 This network is not trained at install time. The app must collect enough valid weekly examples for the individual user before a prediction is available. Synthetic tests do not establish real-world accuracy.
