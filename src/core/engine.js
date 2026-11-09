@@ -54,7 +54,7 @@ export function buildRecommendations(data,patterns,trend,priorities,proposal){
 }
 
 export function createOwjAI({storage,clock=()=>new Date()}={}){
- const memoryStore=storage??(async()=>{const m=new Map();return{get:async k=>m.get(k)??null,set:async(k,v)=>m.set(k,v),remove:async k=>m.delete(k)}})();
+ const memoryStore=storage??(()=>{const m=new Map();return{get:async k=>m.get(k)??null,set:async(k,v)=>m.set(k,v),remove:async k=>m.delete(k)}})();
  const assert=id=>{if(typeof id!=='string'||!id.trim())throw new TypeError('input.userId is required')};
  async function getMemory(userId){assert(userId);return memoryStore.get(userId)}
  async function clearMemory(userId){assert(userId);return memoryStore.remove(userId)}
