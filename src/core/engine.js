@@ -621,19 +621,20 @@ export function createOwjAI({ storage, clock = () => new Date() } = {}) {
       session.startedAt >= new Date(now.getTime() - 7 * DAY) && session.actualMinutes > 0
     );
     const neuralFeatures = {
-      studyMinutes7d: data.overview.totalMinutes7d,
-      studyMinutesPrevious7d: data.overview.totalMinutesPrevious7d,
-      activeDays7d: data.overview.activeDays7d,
-      sessions7d: data.overview.sessions7d,
+      studyMinutes7d: clamp(data.overview.totalMinutes7d, 0, 4200),
+      studyMinutesPrevious7d: clamp(data.overview.totalMinutesPrevious7d, 0, 4200),
+      activeDays7d: clamp(data.overview.activeDays7d, 0, 7),
+      sessions7d: clamp(data.overview.sessions7d, 0, 70),
       completionRate: data.overview.completionRate,
-      plannedVsActualPercent: data.overview.plannedVsActualPercent,
+      plannedVsActualPercent: data.overview.plannedVsActualPercent == null
+        ? null : clamp(data.overview.plannedVsActualPercent, 0, 150),
       assessmentPerformance: assessmentValues.length
         ? assessmentValues.reduce((sum, value) => sum + value, 0) / assessmentValues.length : null,
-      daysUntilNextExam: upcomingExamDays.length ? Math.min(...upcomingExamDays) : null,
-      consistencyScore: patterns.consistencyScore,
-      averageSessionMinutes: data.overview.averageSessionMinutes,
-      subjectsStudied7d: new Set(recentSessions.map(session => session.subject)).size,
-      missedSessions7d: recentSessions.filter(session => !session.completed).length
+      daysUntilNextExam: upcomingExamDays.length ? clamp(Math.min(...upcomingExamDays), 0, 90) : null,
+      consistencyScore: clamp(patterns.consistencyScore, 0, 100),
+      averageSessionMinutes: clamp(data.overview.averageSessionMinutes, 0, 240),
+      subjectsStudied7d: clamp(new Set(recentSessions.map(session => session.subject)).size, 0, 20),
+      missedSessions7d: clamp(recentSessions.filter(session => !session.completed).length, 0, 70)
     };
     const neuralForecast = neural.predict(neuralFeatures);
     const hybridDecision = buildHybridDecision({
