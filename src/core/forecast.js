@@ -26,11 +26,15 @@ export function createWeeklyForecast(history = [], trend, now = new Date()) {
   }];
 }
 
-export function settleWeeklyForecasts(history = [], sessions = [], now = new Date()) {
+export function settleWeeklyForecasts(history = [], sessions = [], now = new Date(), historyCompleteThrough = null) {
+  const coverage = historyCompleteThrough instanceof Date
+    ? historyCompleteThrough
+    : historyCompleteThrough == null ? null : new Date(historyCompleteThrough);
   return history.map(forecast => {
-    if (forecast.actualMinutes != null || new Date(forecast.targetEndAt) > now) return forecast;
     const start = new Date(forecast.targetStartAt);
     const end = new Date(forecast.targetEndAt);
+    if (forecast.actualMinutes != null || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())
+      || end <= start || end > now || !coverage || Number.isNaN(coverage.getTime()) || coverage < end) return forecast;
     const actualMinutes = round(sessions.reduce((sum, session) => {
       const date = session.startedAt instanceof Date ? session.startedAt : new Date(session.startedAt);
       return date >= start && date < end ? sum + Math.max(0, Number(session.actualMinutes) || 0) : sum;
