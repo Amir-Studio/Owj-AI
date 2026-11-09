@@ -22,7 +22,8 @@
 - Better baselines and seasonality
 - [x] User feedback on recommendation acceptance/usefulness and plan outcomes
 - [x] Conservative feedback-based workload adjustment
-- [ ] Forecast backtesting and confidence calibration
+- [x] Store forecasts once and score them against later actual study minutes
+- [ ] Confidence calibration after enough completed forecast evaluations
 - Transparent memory review/reset screen
 - Better overload and repeated-plan-failure detection
 
