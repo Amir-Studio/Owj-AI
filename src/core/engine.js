@@ -63,6 +63,22 @@ function normalizeInput(raw, now) {
     targetMinutes: clamp(finite(item.targetMinutes, 300), 30, 100_000)
   })).filter(item => item.date && item.date >= new Date(now.getTime() - DAY));
 
+  const assessments = (Array.isArray(raw.assessments) ? raw.assessments : [])
+    .filter(item => item && typeof item === 'object' && !Array.isArray(item))
+    .map((item, index) => {
+      const date = toDate(item.date ?? item.takenAt ?? item.createdAt);
+      const directPercent = item.scorePercent == null ? null : Number(item.scorePercent);
+      const score = item.score == null ? null : Number(item.score);
+      const maxScore = item.maxScore == null ? null : Number(item.maxScore);
+      const scorePercent = Number.isFinite(directPercent) ? directPercent
+        : Number.isFinite(score) && Number.isFinite(maxScore) && maxScore > 0 ? score / maxScore * 100 : null;
+      return {
+        id: String(item.id ?? index),
+        subject: String(item.subject ?? '').trim(),
+        date, scorePercent: Number.isFinite(scorePercent) ? clamp(scorePercent, 0, 100) : null,
+        type: String(item.type ?? 'assessment')
+      };
+    }).filter(item => item.subject && item.date && item.date <= now && item.scorePercent != null);
   const profile = raw.profile ?? {};
   const subjects = [...new Set((Array.isArray(profile.subjects) ? profile.subjects : [])
     .filter(value => value != null).map(value => String(typeof value === 'object' && value ? value.name ?? value.subject ?? '' : value).trim())
@@ -151,15 +167,37 @@ export function analyzeData(input, now = new Date()) {
       activeDays: new Set(), lastStudiedAt: null
     });
   }
-  const subjects = [...subjectMap.values()].map(item => ({
+  const assessmentMap = new Map();
+  for (const assessment of input.assessments ?? []) {
+    const daysOld = Math.max(0, (now - assessment.date) / DAY);
+    const weight = Math.exp(-daysOld / 60);
+    const entry = assessmentMap.get(assessment.subject) ?? {
+      weightedScore: 0, totalWeight: 0, count: 0, latestAssessmentAt: null
+    };
+    entry.weightedScore += assessment.scorePercent * weight;
+    entry.totalWeight += weight;
+    entry.count += 1;
+    if (!entry.latestAssessmentAt || assessment.date > entry.latestAssessmentAt) entry.latestAssessmentAt = assessment.date;
+    assessmentMap.set(assessment.subject, entry);
+    if (!subjectMap.has(assessment.subject)) subjectMap.set(assessment.subject, {
+      subject: assessment.subject, totalMinutes: 0, sessions: 0, completedSessions: 0,
+      activeDays: new Set(), lastStudiedAt: null
+    });
+  }
+  const subjects = [...subjectMap.values()].map(item => {
+    const assessment = assessmentMap.get(item.subject);
+    return ({
     subject: item.subject,
     totalMinutes: round(item.totalMinutes),
     sessions: item.sessions,
     completedSessions: item.completedSessions,
     activeDays: item.activeDays.size,
     averageMinutes: item.sessions ? round(item.totalMinutes / item.sessions) : 0,
-    lastStudiedAt: item.lastStudiedAt?.toISOString() ?? null
-  })).sort((a, b) => b.totalMinutes - a.totalMinutes || a.subject.localeCompare(b.subject));
+    lastStudiedAt: item.lastStudiedAt?.toISOString() ?? null,
+    assessmentCount: assessment?.count ?? 0,
+    recentPerformancePercent: assessment ? round(assessment.weightedScore / assessment.totalWeight) : null,
+    latestAssessmentAt: assessment?.latestAssessmentAt?.toISOString() ?? null
+  }); }).sort((a, b) => b.totalMinutes - a.totalMinutes || a.subject.localeCompare(b.subject));
 
   const sessionPlanned = sessions.reduce((sum, s) => sum + s.plannedMinutes, 0);
   const sessionActual = sessions.reduce((sum, s) => sum + s.actualMinutes, 0);
@@ -289,6 +327,24 @@ export function rankPriorities(input, data, patterns, now = new Date()) {
       priority: score >= 80 ? 'critical' : score >= 65 ? 'high' : score >= 45 ? 'medium' : 'low',
       reason: `${daysLeft} روز تا آزمون باقی مانده و بر اساس زمان مطالعهٔ ثبت‌شده، ${round(preparation)}٪ از هدف زمانی تعیین‌شده پوشش داده شده است.`
     });
+  }
+
+  for (const subject of data.subjects) {
+    if (subject.recentPerformancePercent != null && subject.recentPerformancePercent < 75) {
+      const daysSinceAssessment = subject.latestAssessmentAt
+        ? Math.max(0, (now - new Date(subject.latestAssessmentAt)) / DAY) : 0;
+      const score = round(clamp(35 + (75 - subject.recentPerformancePercent) * 1.2
+        + Math.min(10, daysSinceAssessment / 14), 35, 85));
+      items.push({
+        id: 'performance-' + encodeURIComponent(subject.subject),
+        type: 'assessment_gap', reasonCode: 'LOW_ASSESSMENT_PERFORMANCE',
+        subject: subject.subject, title: 'تقویت عملکرد در ' + subject.subject,
+        score, priority: score >= 65 ? 'high' : 'medium',
+        performancePercent: subject.recentPerformancePercent,
+        assessmentCount: subject.assessmentCount,
+        reason: `میانگین وزنی نتایج آزمون‌های ثبت‌شده ${subject.recentPerformancePercent}٪ است؛ این درس برای تمرین هدفمند اولویت گرفته است.`
+      });
+    }
   }
 
   const recentBySubject = new Map();
@@ -447,7 +503,7 @@ export function createOwjAI({ storage, clock = () => new Date() } = {}) {
   async function analyze(raw) {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new TypeError('analyze expects an object');
     assertUserId(raw.userId);
-    for (const key of ['sessions', 'plans', 'exams']) {
+    for (const key of ['sessions', 'plans', 'exams', 'assessments']) {
       if (raw[key] != null && !Array.isArray(raw[key])) throw new TypeError(key + ' must be an array');
     }
     const now = raw.now ? toDate(raw.now) : toDate(clock());
