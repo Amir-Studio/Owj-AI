@@ -546,7 +546,7 @@ export function createOwjAI({ storage, clock = () => new Date() } = {}) {
       feedback: feedbackSummary, forecastAccuracy
     };
     const currentWeek = weekKey(now);
-    const snapshots = [...(old?.snapshots ?? []).filter(s => s.weekKey !== currentWeek), {
+    const snapshots = [...(old?.snapshots ?? []).filter(s => s && typeof s === 'object' && s.weekKey !== currentWeek), {
       weekKey: currentWeek, createdAt: result.createdAt,
       totalMinutes7d: data.overview.totalMinutes7d,
       sessions7d: data.overview.sessions7d,
