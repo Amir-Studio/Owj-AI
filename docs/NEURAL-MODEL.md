@@ -57,7 +57,7 @@ Weights are stored inside that user's local memory envelope, preserved by ordina
 
 ## Evaluation and limitations
 
-The holdout reports mean absolute error for both outputs and compares them against a simple training-mean baseline. Reliability is described as limited, developing or promising-not-proven; the model does not fabricate a probability confidence score. Prediction ranges are based on holdout MAE and are descriptive, not formal statistical confidence intervals.
+The holdout reports mean absolute error for both outputs and compares them against a simple training-mean baseline. A neural forecast is exposed only when it matches or beats that baseline on **both** held-out targets. If either target is worse, inference returns the training-mean baseline (`baseline_fallback`), and the hybrid decision layer does not treat it as a neural signal. This prevents a more complex model from being trusted merely because it trained successfully. Reliability is described as limited, developing or promising-not-proven; the model does not fabricate a probability confidence score. Prediction ranges are based on holdout MAE and are descriptive, not formal statistical confidence intervals.
 
 The repository contains implementation and synthetic tests, not a production-trained model or real student dataset. Synthetic tests verify implementation paths, not real predictive quality. Before production use, evaluate on consented, representative student data across several exam periods and compare against simple baselines. The deterministic Owj engine remains the fallback when the neural model is untrained or weak.
 
