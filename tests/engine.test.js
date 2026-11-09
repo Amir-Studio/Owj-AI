@@ -219,6 +219,44 @@ test('preserves feedback when analysis and feedback arrive concurrently', async 
   assert.equal(memory.snapshots.length, 1);
 });
 
+test('shrinks sparse assessment evidence and deduplicates sync retries', async () => {
+  const ai = createOwjAI({ clock: () => now });
+  const result = await ai.analyze({
+    userId: 'u-sparse-assessment',
+    profile: { subjects: ['Chemistry'] },
+    sessions: [], plans: [], exams: [],
+    assessments: [
+      { id: 'same', subject: 'Chemistry', scorePercent: 10, date: '2026-11-08T10:00:00Z' },
+      { id: 'same', subject: 'Chemistry', scorePercent: 10, date: '2026-11-08T10:00:00Z' },
+      { id: 'invalid', subject: 'Chemistry', scorePercent: 140, date: '2026-11-08T10:00:00Z' }
+    ]
+  });
+  const chemistry = result.subjects.find(subject => subject.subject === 'Chemistry');
+  assert.equal(chemistry.assessmentCount, 1);
+  assert.equal(chemistry.recentPerformancePercent, 10);
+  assert.ok(chemistry.estimatedPerformancePercent > 10);
+  assert.ok(chemistry.assessmentConfidence < 0.5);
+  const priority = result.priorities.find(item => item.reasonCode === 'LOW_ASSESSMENT_PERFORMANCE');
+  assert.ok(priority);
+  assert.equal(priority.priority, 'medium');
+});
+
+test('stale assessment evidence decays and cannot dominate current priorities', async () => {
+  const ai = createOwjAI({ clock: () => now });
+  const result = await ai.analyze({
+    userId: 'u-stale-assessment',
+    profile: { subjects: ['Physics'] },
+    sessions: [], plans: [], exams: [],
+    assessments: [
+      { id: 'old-1', subject: 'Physics', scorePercent: 20, date: '2025-11-08T10:00:00Z' },
+      { id: 'old-2', subject: 'Physics', scorePercent: 25, date: '2025-11-06T10:00:00Z' }
+    ]
+  });
+  const physics = result.subjects.find(subject => subject.subject === 'Physics');
+  assert.ok(physics.assessmentConfidence < 0.02);
+  assert.equal(result.priorities.some(item => item.reasonCode === 'LOW_ASSESSMENT_PERFORMANCE'), false);
+});
+
 test('recovers safely from malformed optional memory collections', async () => {
   let saved = {
     schemaVersion: 3,
@@ -260,5 +298,7 @@ test('uses recent assessment performance to prioritize weak subjects', async () 
   assert.equal(physics.recentPerformancePercent, 92);
   const weakSubject = result.priorities.find(item => item.reasonCode === 'LOW_ASSESSMENT_PERFORMANCE');
   assert.equal(weakSubject.subject, 'Math');
-  assert.equal(weakSubject.priority, 'high');
+  assert.equal(weakSubject.priority, 'medium');
+  assert.ok(weakSubject.assessmentConfidence > 0 && weakSubject.assessmentConfidence < 0.85);
+  assert.ok(weakSubject.estimatedPerformancePercent > weakSubject.performancePercent);
 });
