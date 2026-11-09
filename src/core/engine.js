@@ -573,9 +573,12 @@ export function createOwjAI({ storage, clock = () => new Date() } = {}) {
       if (!Number.isFinite(actualMinutes) || actualMinutes < 0 || actualMinutes > 24 * 60) {
         throw new TypeError('plan outcome requires actualMinutes between 0 and 1440');
       }
+      if (typeof event.completed !== 'boolean') {
+        throw new TypeError('plan outcome requires completed boolean');
+      }
       entry.plannedMinutes = plannedMinutes;
       entry.actualMinutes = actualMinutes;
-      entry.completed = event.completed === true;
+      entry.completed = event.completed;
       entry.subject = String(event.subject ?? '').trim();
     }
     return withUserLock(event.userId, async () => {
