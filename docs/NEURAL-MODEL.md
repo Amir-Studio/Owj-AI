@@ -1,3 +1,7 @@
+# Owj Study Intelligence v0.8
+
+The deterministic diagnosis layer is separate from the experimental neural forecaster. It classifies observable subject-level signals as insufficient evidence, practice gap, possible concept gap, review risk, declining performance, monitor, or maintain. It requires repeated dated assessments before making performance claims, uses recent logged practice as context, and returns its evidence and next action. A review-risk label is not proof that knowledge has been forgotten. These labels are decision support, not a measure of intelligence or fixed ability.
+
 # Owj Study Neural Model v3
 
 Owj's optional neural component is a local, provider-independent feed-forward network for forecasting study behavior. It is not a general-purpose tutor and does not predict exam grades.
