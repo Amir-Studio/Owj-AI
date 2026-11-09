@@ -69,6 +69,7 @@ console.log(result.recommendations);
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md)
+- [Neural model](docs/NEURAL-MODEL.md)
 - [Data contract](docs/DATA-CONTRACT.md)
 - [Owj integration](docs/INTEGRATION.md)
 - [Privacy](docs/PRIVACY.md)
