@@ -268,7 +268,7 @@ export function createStudyNeuralModel(savedModel = null) {
     const completion = Number((completionRatio * 100).toFixed(1));
     const metrics = model.validation;
     const reliability = metrics.beatsBaseline !== true ? 'limited'
-      : model.trainedExamples >= 100 && metrics.meanAbsoluteStudyMinutesError < 600 && metrics.meanAbsoluteCompletionRateError < 12
+      : (model.totalExamples ?? model.trainedExamples) >= 100 && metrics.meanAbsoluteStudyMinutesError < 600 && metrics.meanAbsoluteCompletionRateError < 12
         ? 'promising_not_proven' : 'developing';
     return {
       status: 'experimental_estimate',
