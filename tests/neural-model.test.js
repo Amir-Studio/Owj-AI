@@ -93,6 +93,6 @@ test('minimum 30-week dataset remains eligible after the holdout split', () => {
   assert.equal(result.status, 'trained');
   assert.equal(result.trainingExamples, 24);
   assert.equal(result.validationExamples, 6);
-  assert.equal(model.predict(makeExamples(29).features).status, 'experimental_estimate');
+  assert.equal(model.predict(makeExamples(29)[28].features).status, 'experimental_estimate');
   assert.equal(model.getMetrics().totalExamples, 30);
 });
