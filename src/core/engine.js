@@ -1,4 +1,4 @@
-import { summarizeFeedback, getPlanFitAdjustment } from './feedback.js';
+import { summarizeFeedback, getPlanFitAdjustment, getSubjectPlanFitAdjustments } from './feedback.js';
 import { createWeeklyForecast, settleWeeklyForecasts, summarizeForecastAccuracy, calibrateWeeklyForecast } from './forecast.js';
 import { createStudyNeuralModel } from '../neural/study-model.js';
 import { diagnoseSubjectLearning } from './diagnosis.js';
@@ -422,6 +422,7 @@ export function rankPriorities(input, data, patterns, now = new Date()) {
 export function proposeAdaptivePlan(input, data, priorities, patterns, now = new Date(), memory = {}) {
   const available = input.profile.dailyAvailableMinutes;
   const feedbackAdjustment = getPlanFitAdjustment(memory?.feedback ?? []);
+  const subjectFitAdjustments = getSubjectPlanFitAdjustments(memory?.feedback ?? []);
   const completionFactor = data.overview.totalSessions < 4 ? 0.8
     : patterns.completionRate >= 85 ? 1
       : patterns.completionRate >= 65 ? 0.9 : 0.75;
@@ -437,7 +438,9 @@ export function proposeAdaptivePlan(input, data, priorities, patterns, now = new
   };
 
   const priorityScore = subject => Math.max(0, ...priorities.filter(p => p.subject === subject).map(p => p.score));
-  const weights = candidates.map(subject => 1 + priorityScore(subject) / 50);
+  const weights = candidates.map(subject =>
+    (1 + priorityScore(subject) / 50) * (subjectFitAdjustments[subject]?.factor ?? 1)
+  );
   const totalWeight = weights.reduce((a, b) => a + b, 0);
   let remaining = capacity;
   const blocks = candidates.map((subject, index) => {
@@ -455,7 +458,7 @@ export function proposeAdaptivePlan(input, data, priorities, patterns, now = new
     };
   }).filter(block => block.suggestedMinutes > 0);
   return {
-    status: 'proposal', createdAt: now.toISOString(), feedbackAdjustment,
+    status: 'proposal', createdAt: now.toISOString(), feedbackAdjustment, subjectFitAdjustments,
     recommendedDailyMinutes: blocks.reduce((sum, block) => sum + block.suggestedMinutes, 0),
     blocks,
     rationale: 'این یک پیشنهاد قابل ویرایش است؛ برنامهٔ اصلی بدون تأیید کاربر تغییر نمی‌کند.'
