@@ -72,6 +72,7 @@ function normalizeInput(raw, now) {
 }
 
 export function analyzeData(input, now = new Date()) {
+  input = normalizeInput({ ...input, sessions: input.sessions ?? [], plans: input.plans ?? [], exams: input.exams ?? [] }, now);
   const sessions = input.sessions.filter(s => s.startedAt && s.startedAt <= now);
   const recent = sessions.filter(s => s.startedAt >= new Date(now.getTime() - 7 * DAY));
   const previous = sessions.filter(s => s.startedAt >= new Date(now.getTime() - 14 * DAY) && s.startedAt < new Date(now.getTime() - 7 * DAY));
@@ -130,6 +131,7 @@ export function analyzeData(input, now = new Date()) {
 }
 
 export function detectPatterns(input, data, memory = {}, now = new Date()) {
+  input = normalizeInput({ ...input, sessions: input.sessions ?? [], plans: input.plans ?? [], exams: input.exams ?? [] }, now);
   const sessions = input.sessions.filter(s => s.startedAt && s.startedAt <= now && s.startedAt >= new Date(now.getTime() - 30 * DAY) && s.actualMinutes > 0);
   const hourTotals = new Map();
   const activeDays = new Set();
@@ -207,6 +209,7 @@ export function predictStudyTrend(data, memory = {}) {
 }
 
 export function rankPriorities(input, data, patterns, now = new Date()) {
+  input = normalizeInput({ ...input, sessions: input.sessions ?? [], plans: input.plans ?? [], exams: input.exams ?? [] }, now);
   const bySubject = new Map(data.subjects.map(s => [s.subject, s]));
   const items = [];
   for (const exam of input.exams) {
