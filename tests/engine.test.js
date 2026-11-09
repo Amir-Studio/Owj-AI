@@ -377,6 +377,10 @@ test('rejects incomplete or out-of-range plan outcome measurements', async () =>
   }), /actualMinutes/);
   await assert.rejects(() => ai.recordFeedback({
     userId: 'u-invalid-outcome', kind: 'plan_outcome',
+    plannedMinutes: 60, actualMinutes: 30, subject: 'Math'
+  }), /completed boolean/);
+  await assert.rejects(() => ai.recordFeedback({
+    userId: 'u-invalid-outcome', kind: 'plan_outcome',
     plannedMinutes: 1500, actualMinutes: 30, completed: false, subject: 'Math'
   }), /plannedMinutes/);
   assert.equal(await ai.getMemory('u-invalid-outcome'), null);
