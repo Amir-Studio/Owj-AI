@@ -46,7 +46,8 @@ test('flags a review risk without claiming proven forgetting', () => {
 test('detects a meaningful decline between prior and recent assessments', () => {
   const result = diagnoseSubjectLearning({
     subject: 'Physics', now,
-    assessments: assessmentSet([85, 86, 84, 65, 62, 60], 'Physics')
+    assessments: assessmentSet([85, 86, 84, 65, 62, 60], 'Physics'),
+    sessions: [{ subject: 'Physics', actualMinutes: 200, startedAt: '2026-11-08T10:00:00Z' }]
   });
   assert.equal(result.code, 'declining_performance');
   assert.equal(result.evidence.assessmentTrend, 'declining');
