@@ -1,5 +1,7 @@
+import { summarizeFeedback, getPlanFitAdjustment } from './feedback.js';
+
 const DAY = 86_400_000;
-const ENGINE_VERSION = '0.2.0';
+const ENGINE_VERSION = '0.3.0';
 const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
 const finite = (v, fallback = 0) => Number.isFinite(Number(v)) ? Number(v) : fallback;
 const round = n => Math.round(n);
@@ -261,19 +263,20 @@ export function rankPriorities(input, data, patterns, now = new Date()) {
   return items.sort((a, b) => b.score - a.score || a.title.localeCompare(b.title));
 }
 
-export function proposeAdaptivePlan(input, data, priorities, patterns, now = new Date()) {
+export function proposeAdaptivePlan(input, data, priorities, patterns, now = new Date(), memory = {}) {
   const available = input.profile.dailyAvailableMinutes;
+  const feedbackAdjustment = getPlanFitAdjustment(memory?.feedback ?? []);
   const completionFactor = data.overview.totalSessions < 4 ? 0.8
     : patterns.completionRate >= 85 ? 1
       : patterns.completionRate >= 65 ? 0.9 : 0.75;
-  const capacity = Math.max(25, Math.round(available * 0.8 * completionFactor / 5) * 5);
+  const capacity = Math.max(25, Math.round(available * 0.8 * completionFactor * feedbackAdjustment.factor / 5) * 5);
   const candidates = [...new Set([
     ...priorities.filter(item => item.subject).sort((a, b) => b.score - a.score).map(item => item.subject),
     ...input.profile.subjects,
     ...data.subjects.map(item => item.subject)
   ])].slice(0, 6);
   if (!candidates.length) return {
-    status: 'insufficient_data', recommendedDailyMinutes: capacity, blocks: [],
+    status: 'insufficient_data', recommendedDailyMinutes: capacity, blocks: [], feedbackAdjustment,
     rationale: 'برای پیشنهاد برنامه، ابتدا نام درس‌ها یا چند جلسهٔ مطالعه ثبت شود.'
   };
 
@@ -295,7 +298,7 @@ export function proposeAdaptivePlan(input, data, priorities, patterns, now = new
     };
   }).filter(block => block.suggestedMinutes > 0);
   return {
-    status: 'proposal', createdAt: now.toISOString(),
+    status: 'proposal', createdAt: now.toISOString(), feedbackAdjustment,
     recommendedDailyMinutes: blocks.reduce((sum, block) => sum + block.suggestedMinutes, 0),
     blocks,
     rationale: 'این یک پیشنهاد قابل ویرایش است؛ برنامهٔ اصلی بدون تأیید کاربر تغییر نمی‌کند.'
@@ -340,6 +343,36 @@ export function createOwjAI({ storage, clock = () => new Date() } = {}) {
     assertUserId(userId);
     return memoryStore.remove(userId);
   }
+  async function recordFeedback(event) {
+    if (!event || typeof event !== 'object' || Array.isArray(event)) throw new TypeError('feedback event must be an object');
+    assertUserId(event.userId);
+    const kind = event.kind ?? 'recommendation';
+    if (!['recommendation', 'plan_outcome'].includes(kind)) throw new TypeError('unsupported feedback kind');
+    const now = event.createdAt ? toDate(event.createdAt) : toDate(clock());
+    if (!now) throw new TypeError('createdAt must be a valid date');
+    const entry = { id: String(event.id ?? makeId()), kind, createdAt: now.toISOString() };
+    if (kind === 'recommendation') {
+      if (typeof event.accepted !== 'boolean') throw new TypeError('recommendation feedback requires accepted boolean');
+      entry.recommendationId = String(event.recommendationId ?? '');
+      entry.accepted = event.accepted;
+      if (event.usefulness != null) entry.usefulness = clamp(round(finite(event.usefulness)), 1, 5);
+    } else {
+      entry.plannedMinutes = clamp(finite(event.plannedMinutes), 0, 24 * 60);
+      entry.actualMinutes = clamp(finite(event.actualMinutes), 0, 24 * 60);
+      if (entry.plannedMinutes <= 0) throw new TypeError('plan outcome requires plannedMinutes > 0');
+      entry.completed = event.completed === true;
+      entry.subject = String(event.subject ?? '').trim();
+    }
+    const previous = await memoryStore.get(event.userId) ?? { schemaVersion: 3, snapshots: [], feedback: [] };
+    const feedback = [...(previous.feedback ?? []).filter(item => item.id !== entry.id), entry].slice(-100);
+    await memoryStore.set(event.userId, { ...previous, schemaVersion: 3, engineVersion: ENGINE_VERSION, updatedAt: now.toISOString(), feedback });
+    return summarizeFeedback(feedback);
+  }
+  async function getFeedbackSummary(userId) {
+    assertUserId(userId);
+    const memory = await memoryStore.get(userId);
+    return summarizeFeedback(memory?.feedback ?? []);
+  }
   async function analyze(raw) {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new TypeError('analyze expects an object');
     assertUserId(raw.userId);
@@ -354,7 +387,8 @@ export function createOwjAI({ storage, clock = () => new Date() } = {}) {
     const patterns = detectPatterns(input, data, old, now);
     const trend = predictStudyTrend(data, old);
     const priorities = rankPriorities(input, data, patterns, now);
-    const planProposal = proposeAdaptivePlan(input, data, priorities, patterns, now);
+    const feedbackSummary = summarizeFeedback(old?.feedback ?? []);
+    const planProposal = proposeAdaptivePlan(input, data, priorities, patterns, now, old ?? {});
     const recommendations = buildRecommendations(data, patterns, trend, priorities, planProposal);
     const recentEvidence = input.sessions.filter(s => s.startedAt >= new Date(now.getTime() - 30 * DAY)).length;
     const evidenceCount = Math.min(1, recentEvidence / 20);
@@ -362,7 +396,8 @@ export function createOwjAI({ storage, clock = () => new Date() } = {}) {
     const result = {
       id: makeId(), engineVersion: ENGINE_VERSION, createdAt: now.toISOString(),
       userId: raw.userId, overview: data.overview, subjects: data.subjects,
-      patterns, trend, priorities, planProposal, recommendations, confidence
+      patterns, trend, priorities, planProposal, recommendations, confidence,
+      feedback: feedbackSummary
     };
     const currentWeek = weekKey(now);
     const snapshots = [...(old?.snapshots ?? []).filter(s => s.weekKey !== currentWeek), {
@@ -376,7 +411,8 @@ export function createOwjAI({ storage, clock = () => new Date() } = {}) {
       lastStudiedAt: s.lastStudiedAt, averageMinutes: s.averageMinutes
     }]));
     await memoryStore.set(raw.userId, {
-      schemaVersion: 2, engineVersion: ENGINE_VERSION, updatedAt: result.createdAt,
+      schemaVersion: 3, engineVersion: ENGINE_VERSION, updatedAt: result.createdAt,
+      feedback: old?.feedback ?? [],
       snapshots, subjects: subjectMemory,
       patterns: {
         preferredStudyHours: patterns.preferredStudyHours,
@@ -389,5 +425,5 @@ export function createOwjAI({ storage, clock = () => new Date() } = {}) {
     });
     return result;
   }
-  return Object.freeze({ analyze, getMemory, clearMemory, version: ENGINE_VERSION });
+  return Object.freeze({ analyze, getMemory, clearMemory, recordFeedback, getFeedbackSummary, version: ENGINE_VERSION });
 }
