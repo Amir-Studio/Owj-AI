@@ -5,7 +5,7 @@ import { diagnoseSubjectLearning } from './diagnosis.js';
 import { buildHybridDecision } from './decision.js';
 
 const DAY = 86_400_000;
-const ENGINE_VERSION = '0.9.5';
+const ENGINE_VERSION = '0.10.0';
 const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
 const finite = (v, fallback = 0) => Number.isFinite(Number(v)) ? Number(v) : fallback;
 const round = n => Math.round(n);
