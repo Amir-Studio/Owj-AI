@@ -302,3 +302,60 @@ test('uses recent assessment performance to prioritize weak subjects', async () 
   assert.ok(weakSubject.assessmentConfidence > 0 && weakSubject.assessmentConfidence < 0.85);
   assert.ok(weakSubject.estimatedPerformancePercent > weakSubject.performancePercent);
 });
+
+
+function makeWeeklyNeuralExamples(count = 30) {
+  return Array.from({ length: count }, (_, index) => {
+    const studyMinutes7d = 600 + index * 30;
+    const completionRate = 45 + (index % 8) * 5;
+    return {
+      weekStart: new Date(Date.UTC(2025, 0, 6 + index * 7)).toISOString().slice(0, 10),
+      features: {
+        studyMinutes7d,
+        studyMinutesPrevious7d: Math.max(0, studyMinutes7d - 90),
+        activeDays7d: 3 + (index % 5),
+        sessions7d: 8 + (index % 12),
+        completionRate,
+        plannedVsActualPercent: Math.min(150, completionRate + 10),
+        assessmentPerformance: 50 + (index % 7) * 6,
+        daysUntilNextExam: 7 + (index % 20),
+        consistencyScore: 40 + (index % 9) * 6,
+        averageSessionMinutes: 30 + (index % 6) * 5,
+        subjectsStudied7d: 2 + (index % 4),
+        missedSessions7d: index % 5
+      },
+      nextWeekMinutes: Math.min(9000, studyMinutes7d * 1.05),
+      nextWeekCompletionRate: Math.min(95, completionRate + 3)
+    };
+  });
+}
+
+test('neural model is persisted per user and survives ordinary analysis', async () => {
+  const ai = createOwjAI({ clock: () => now });
+  const examples = makeWeeklyNeuralExamples();
+  const trained = await ai.trainNeuralModel('u-neural', examples, { epochs: 100, seed: 11 });
+  assert.equal(trained.status, 'trained');
+  assert.equal(trained.acceptedExamples, 30);
+  assert.equal(trained.trainingExamples, 24);
+  assert.equal(trained.validationExamples, 6);
+
+  const prediction = await ai.predictNeuralModel('u-neural', examples.at(-1).features);
+  assert.equal(prediction.status, 'experimental_estimate');
+  assert.ok(Number.isFinite(prediction.nextWeekMinutes));
+  assert.equal((await ai.getNeuralMetrics('u-neural')).totalExamples, 30);
+
+  await ai.analyze({ ...input, userId: 'u-neural' });
+  assert.equal((await ai.getMemory('u-neural')).neuralModel.schemaVersion, 3);
+  assert.equal((await ai.getNeuralMetrics('u-other')).totalExamples, 0);
+
+  await ai.clearMemory('u-neural');
+  assert.equal((await ai.predictNeuralModel('u-neural', examples.at(-1).features)).status, 'insufficient_training');
+});
+
+test('insufficient neural data is not persisted as a trained model', async () => {
+  const ai = createOwjAI({ clock: () => now });
+  const result = await ai.trainNeuralModel('u-neural-small', makeWeeklyNeuralExamples(29));
+  assert.equal(result.status, 'insufficient_training_data');
+  assert.equal(await ai.getMemory('u-neural-small'), null);
+  assert.equal((await ai.getNeuralMetrics('u-neural-small')).totalExamples, 0);
+});
