@@ -91,7 +91,8 @@ function normalizeInput(raw, now) {
     },
     sessions: [...uniqueSessions.values()],
     plans,
-    exams
+    exams,
+    assessments
   };
 }
 
