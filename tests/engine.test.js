@@ -91,3 +91,43 @@ test('requires user ID, validates arrays and supports clearing memory', async ()
   await ai.clearMemory('u1');
   assert.equal(await ai.getMemory('u1'), null);
 });
+
+
+test('records recommendation feedback and summarizes usefulness', async () => {
+  const ai = createOwjAI({ clock: () => now });
+  await ai.recordFeedback({ userId: 'u-feedback', id: 'r1', kind: 'recommendation', recommendationId: 'priority-1', accepted: true, usefulness: 5 });
+  await ai.recordFeedback({ userId: 'u-feedback', id: 'r2', kind: 'recommendation', recommendationId: 'priority-2', accepted: false, usefulness: 3 });
+  const summary = await ai.getFeedbackSummary('u-feedback');
+  assert.equal(summary.recommendationCount, 2);
+  assert.equal(summary.acceptanceRatePercent, 50);
+  assert.equal(summary.averageUsefulness, 4);
+});
+
+test('plan outcomes gradually adjust future workload without overreacting to sparse data', async () => {
+  const ai = createOwjAI({ clock: () => now });
+  const base = {
+    userId: 'u-fit', now: now.toISOString(),
+    profile: { dailyAvailableMinutes: 300, subjects: ['Math'] },
+    sessions: [], plans: [], exams: []
+  };
+  const before = await ai.analyze(base);
+  assert.equal(before.planProposal.feedbackAdjustment.status, 'insufficient_feedback');
+  for (let i = 0; i < 3; i++) {
+    await ai.recordFeedback({
+      userId: 'u-fit', id: 'plan-' + i, kind: 'plan_outcome',
+      plannedMinutes: 100, actualMinutes: 40, completed: false, subject: 'Math'
+    });
+  }
+  const after = await ai.analyze(base);
+  assert.equal(after.planProposal.feedbackAdjustment.factor, 0.85);
+  assert.ok(after.planProposal.recommendedDailyMinutes < before.planProposal.recommendedDailyMinutes);
+  assert.equal(after.feedback.planOutcomeCount, 3);
+});
+
+test('rejects malformed feedback and keeps feedback isolated by user', async () => {
+  const ai = createOwjAI({ clock: () => now });
+  await assert.rejects(() => ai.recordFeedback({ userId: 'u1', kind: 'recommendation' }), /accepted boolean/);
+  await assert.rejects(() => ai.recordFeedback({ userId: 'u1', kind: 'plan_outcome', plannedMinutes: 0 }), /plannedMinutes/);
+  await ai.recordFeedback({ userId: 'u1', kind: 'recommendation', accepted: true });
+  assert.equal((await ai.getFeedbackSummary('u2')).totalEvents, 0);
+});
