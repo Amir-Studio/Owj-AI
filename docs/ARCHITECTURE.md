@@ -54,3 +54,7 @@ A weekly estimate is stored once for the next calendar week; repeated analyses d
 
 ## Assessment evidence
 The optional `assessments` input accepts percentage scores or score/maxScore pairs. Per-subject observed performance uses a 60-day recency-weighted average. A second estimate shrinks sparse or stale evidence toward a neutral 70% baseline using effective sample size and a 120-day freshness factor (confidence is capped at 0.85). Duplicate stable assessment IDs are collapsed, invalid scores are rejected, and low-performance priorities require both a meaningful estimated gap and minimum evidence confidence. This is an uncertainty-aware planning signal, not a definitive mastery estimate; scores should be comparable and dated.
+
+
+## Optional neural predictor (v0.7)
+The package also exports an experimental supervised neural predictor. It uses an 8-feature study snapshot plus missingness indicators, a 16-unit hidden layer, and two outputs (next-week study minutes and plan completion). Training uses Adam, gradient clipping, shuffled mini-batches, and a chronological holdout when at least 20 labeled weeks exist. Validation compares both outputs against a baseline computed from training labels only. This component is optional and does not currently drive the deterministic plan proposal. It must not be treated as reliable until real, consented data demonstrates that it beats the baseline on later unseen weeks.
