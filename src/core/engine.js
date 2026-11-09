@@ -221,16 +221,22 @@ export function rankPriorities(input, data, patterns, now = new Date()) {
     items.push({
       id: 'exam-' + exam.id, type: 'exam', subject: exam.subject,
       title: exam.title || 'آمادگی آزمون ' + exam.subject, daysLeft,
-      preparationPercent: round(preparation), score,
+      studyTargetProgressPercent: round(preparation), score,
       priority: score >= 80 ? 'critical' : score >= 65 ? 'high' : score >= 45 ? 'medium' : 'low',
-      reason: `${daysLeft} روز تا آزمون باقی مانده و بر اساس زمان مطالعهٔ ثبت‌شده، آمادگی تقریبی ${round(preparation)}٪ است.`
+      reason: `${daysLeft} روز تا آزمون باقی مانده و بر اساس زمان مطالعهٔ ثبت‌شده، ${round(preparation)}٪ از هدف زمانی تعیین‌شده پوشش داده شده است.`
     });
   }
 
-  const studiedTotal = Math.max(1, data.subjects.reduce((sum, s) => sum + s.totalMinutes, 0));
-  const activeSubjectNames = new Set(input.sessions.filter(s => s.actualMinutes > 0).map(s => s.subject));
+  const recentBySubject = new Map();
+  for (const session of input.sessions) {
+    if (session.actualMinutes > 0 && session.startedAt >= new Date(now.getTime() - 30 * DAY)) {
+      recentBySubject.set(session.subject, (recentBySubject.get(session.subject) ?? 0) + session.actualMinutes);
+    }
+  }
+  const recentTotal = Math.max(1, [...recentBySubject.values()].reduce((sum, value) => sum + value, 0));
   for (const subject of data.subjects) {
-    const share = subject.totalMinutes / studiedTotal;
+    const recentMinutes = recentBySubject.get(subject.subject) ?? 0;
+    const share = recentMinutes / recentTotal;
     const daysSince = subject.lastStudiedAt ? (now - new Date(subject.lastStudiedAt)) / DAY : Infinity;
     if (subject.sessions === 0 || (data.subjects.length > 1 && share < 0.12) || daysSince >= 7) {
       const score = round(clamp(35 + (subject.sessions === 0 ? 28 : 0) + (Number.isFinite(daysSince) ? Math.min(25, daysSince * 2) : 18) + (share < 0.12 ? 15 : 0), 0, 85));
@@ -345,7 +351,8 @@ export function createOwjAI({ storage, clock = () => new Date() } = {}) {
     const priorities = rankPriorities(input, data, patterns, now);
     const planProposal = proposeAdaptivePlan(input, data, priorities, patterns, now);
     const recommendations = buildRecommendations(data, patterns, trend, priorities, planProposal);
-    const evidenceCount = Math.min(1, data.overview.totalSessions / 20);
+    const recentEvidence = input.sessions.filter(s => s.startedAt >= new Date(now.getTime() - 30 * DAY)).length;
+    const evidenceCount = Math.min(1, recentEvidence / 20);
     const confidence = round(clamp(0.15 + evidenceCount * 0.55 + (data.subjects.length ? 0.1 : 0) + (old?.snapshots?.length >= 3 ? 0.1 : 0), 0.15, 0.9) * 100) / 100;
     const result = {
       id: makeId(), engineVersion: ENGINE_VERSION, createdAt: now.toISOString(),
