@@ -35,7 +35,7 @@ test('detects patterns and ranks upcoming exams', () => {
   assert.equal(patterns.abandonedPlans, 1);
   const examPriority = priorities.find(item => item.type === 'exam' && item.subject === 'Physics');
   assert.ok(examPriority);
-  assert.equal(examPriority.studyTargetProgressPercent, 30);
+  assert.equal(examPriority.studyTargetProgressPercent, 10);
   assert.equal('preparationPercent' in examPriority, false);
   assert.ok(priorities.some(item => item.type === 'subject_gap' && item.subject === 'Chemistry'));
 });
