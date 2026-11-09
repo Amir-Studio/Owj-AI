@@ -2,7 +2,7 @@
 
 **Owj AI** is the first-party, provider-independent intelligence engine for the Owj study planner.
 
-The v0.3 engine is written in JavaScript and runs inside the Owj app. It validates study records, detects personal routines, estimates weekly trends, ranks exam and subject priorities, proposes a workload-aware plan, and stores compact user-specific memory on the device, records explicit user feedback, and adjusts future workload cautiously from repeated plan outcomes.
+The v0.3 engine is written in JavaScript and runs inside the Owj app. It validates study records, detects personal routines, estimates weekly trends, ranks exam and subject priorities, proposes a workload-aware plan, and stores compact user-specific memory on the device, records explicit user feedback, adjusts future workload cautiously from repeated plan outcomes, audits incoming data quality, and scores forecasts only when the history-completeness watermark confirms the full period is available.
 
 ## Product principles
 
