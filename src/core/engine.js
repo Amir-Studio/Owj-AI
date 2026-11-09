@@ -1,5 +1,5 @@
 import { summarizeFeedback, getPlanFitAdjustment } from './feedback.js';
-import { createWeeklyForecast, settleWeeklyForecasts, summarizeForecastAccuracy } from './forecast.js';
+import { createWeeklyForecast, settleWeeklyForecasts, summarizeForecastAccuracy, calibrateWeeklyForecast } from './forecast.js';
 import { createStudyNeuralModel } from '../neural/study-model.js';
 import { diagnoseSubjectLearning } from './diagnosis.js';
 import { buildHybridDecision } from './decision.js';
@@ -607,7 +607,11 @@ export function createOwjAI({ storage, clock = () => new Date() } = {}) {
     const priorities = rankPriorities(input, data, patterns, now);
     const feedbackSummary = summarizeFeedback(old?.feedback ?? []);
     const settledForecasts = settleWeeklyForecasts(old?.forecastHistory ?? [], input.sessions, now, toDate(raw.historyCompleteThrough));
-    const forecastHistory = createWeeklyForecast(settledForecasts, trend, now).slice(-16);
+    // Learn only from completed forecast windows; never calibrate against the
+    // forecast currently being issued or an incomplete study-history period.
+    const forecastCalibration = calibrateWeeklyForecast(trend, settledForecasts);
+    const calibratedTrend = forecastCalibration.trend ?? trend;
+    const forecastHistory = createWeeklyForecast(settledForecasts, calibratedTrend, now).slice(-16);
     const forecastAccuracy = summarizeForecastAccuracy(forecastHistory);
     const planProposal = proposeAdaptivePlan(input, data, priorities, patterns, now, old ?? {});
     const recommendations = buildRecommendations(data, patterns, trend, priorities, planProposal);
@@ -638,7 +642,7 @@ export function createOwjAI({ storage, clock = () => new Date() } = {}) {
     };
     const neuralForecast = neural.predict(neuralFeatures);
     const hybridDecision = buildHybridDecision({
-      subjects: data.subjects, priorities, patterns, trend, neuralForecast,
+      subjects: data.subjects, priorities, patterns, trend: calibratedTrend, neuralForecast,
       dataQuality, overview: data.overview, feedback: feedbackSummary
     });
     const recentEvidence = input.sessions.filter(s => s.startedAt >= new Date(now.getTime() - 30 * DAY)).length;
@@ -652,7 +656,7 @@ export function createOwjAI({ storage, clock = () => new Date() } = {}) {
     const result = {
       id: makeId(), engineVersion: ENGINE_VERSION, createdAt: now.toISOString(),
       userId: raw.userId, overview: data.overview, subjects: data.subjects, dataQuality,
-      patterns, trend, priorities, planProposal, recommendations, hybridDecision, confidence,
+      patterns, trend: calibratedTrend, forecastCalibration, priorities, planProposal, recommendations, hybridDecision, confidence,
       confidenceType: 'heuristic_evidence_score',
       feedback: feedbackSummary, forecastAccuracy
     };
