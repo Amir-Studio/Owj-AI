@@ -96,13 +96,13 @@ function score(model, examples) {
   };
 }
 
-function baselineScore(examples) {
-  if (!examples.length) return null;
-  const meanMinutes = examples.reduce((sum, item) => sum + Number(item.nextWeekMinutes), 0) / examples.length;
-  const meanCompletion = examples.reduce((sum, item) => sum + Number(item.completionRate), 0) / examples.length;
+function baselineScore(training, evaluation) {
+  if (!training.length || !evaluation.length) return null;
+  const meanMinutes = training.reduce((sum, item) => sum + Number(item.nextWeekMinutes), 0) / training.length;
+  const meanCompletion = training.reduce((sum, item) => sum + Number(item.completionRate), 0) / training.length;
   return {
-    meanAbsoluteStudyMinutesError: Math.round(examples.reduce((sum, item) => sum + Math.abs(meanMinutes - Number(item.nextWeekMinutes)), 0) / examples.length),
-    meanAbsoluteCompletionRateError: Number((examples.reduce((sum, item) => sum + Math.abs(meanCompletion - Number(item.completionRate)), 0) / examples.length).toFixed(2))
+    meanAbsoluteStudyMinutesError: Math.round(evaluation.reduce((sum, item) => sum + Math.abs(meanMinutes - Number(item.nextWeekMinutes)), 0) / evaluation.length),
+    meanAbsoluteCompletionRateError: Number((evaluation.reduce((sum, item) => sum + Math.abs(meanCompletion - Number(item.completionRate)), 0) / evaluation.length).toFixed(2))
   };
 }
 
@@ -213,7 +213,7 @@ export function createStudyNeuralModel(savedModel = null) {
     };
     const random = randomGenerator(config.seed ?? 731);
     const optimizer = createAdam();
-    const baseline = baselineScore(validation.length ? validation : training);
+    const baseline = baselineScore(training, validation.length ? validation : training);
     let best = structuredClone(candidate);
     let bestLoss = Infinity;
     let stale = 0;
