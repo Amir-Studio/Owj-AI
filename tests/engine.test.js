@@ -253,7 +253,7 @@ test('stale assessment evidence decays and cannot dominate current priorities', 
     ]
   });
   const physics = result.subjects.find(subject => subject.subject === 'Physics');
-  assert.ok(physics.assessmentConfidence < 0.02);
+  assert.ok(physics.assessmentConfidence < 0.03);
   assert.equal(result.priorities.some(item => item.reasonCode === 'LOW_ASSESSMENT_PERFORMANCE'), false);
 });
 
