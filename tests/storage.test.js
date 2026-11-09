@@ -64,3 +64,12 @@ test('rejects invalid IDs and non-object memory values', async () => {
   await assert.rejects(() => storage.get(' '), /userId is required/);
   await assert.rejects(() => storage.set('user-1', null), /memory value must be an object/);
 });
+
+
+test('reads v3 memory with feedback history', async () => {
+  const adapter = makeAdapter(new Map([
+    ['owj-ai-memory:v1:user-3', JSON.stringify({ schemaVersion: 3, feedback: [{ id: 'f1' }] })]
+  ]));
+  const storage = createMemoryStorage(adapter);
+  assert.deepEqual(await storage.get('user-3'), { schemaVersion: 3, feedback: [{ id: 'f1' }] });
+});
