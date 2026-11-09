@@ -3,7 +3,7 @@ import { createWeeklyForecast, settleWeeklyForecasts, summarizeForecastAccuracy 
 import { createStudyNeuralModel } from '../neural/study-model.js';
 
 const DAY = 86_400_000;
-const ENGINE_VERSION = '0.5.0';
+const ENGINE_VERSION = '0.7.0';
 const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
 const finite = (v, fallback = 0) => Number.isFinite(Number(v)) ? Number(v) : fallback;
 const round = n => Math.round(n);
@@ -633,7 +633,7 @@ export function createOwjAI({ storage, clock = () => new Date() } = {}) {
     }]));
     await memoryStore.set(raw.userId, {
       schemaVersion: 3, engineVersion: ENGINE_VERSION, updatedAt: result.createdAt,
-      feedback: old?.feedback ?? [], forecastHistory,
+      feedback: old?.feedback ?? [], forecastHistory, neuralModel: old?.neuralModel ?? null,
       snapshots, subjects: subjectMemory,
       patterns: {
         preferredStudyHours: patterns.preferredStudyHours,
