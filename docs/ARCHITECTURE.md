@@ -23,7 +23,7 @@ Run analysis after meaningful events (session completion, plan/exam changes, or 
 
 ## Memory and privacy
 
-Memory is keyed by authenticated user ID and stores aggregate snapshots, subject summaries and selected patterns—not full raw session history. The browser adapter accepts both the legacy v1 and current v2 memory envelope so an engine upgrade does not silently erase existing user history. Browser localStorage is the starter adapter; Capacitor Preferences or encrypted storage can replace it. Clear memory on sign-out when the product's account-isolation policy requires it.
+Memory is keyed by authenticated user ID and stores aggregate snapshots, subject summaries, feedback events, forecast evaluations and selected patterns—not full raw session history. The browser adapter accepts both the legacy v1/v2 and current v3 memory envelope so an engine upgrade does not silently erase existing user history. Browser localStorage is the starter adapter; Capacitor Preferences or encrypted storage can replace it. Clear memory on sign-out when the product's account-isolation policy requires it.
 
 ## Limits
 
