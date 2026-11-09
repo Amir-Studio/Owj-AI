@@ -1,23 +1,30 @@
 # Architecture
 
-Owj AI v0.1 is a deterministic JavaScript engine executed by the Owj app. It does not call a hosted LLM. The app passes Owj-owned profile, session, plan and exam records. The engine validates, aggregates, detects patterns, estimates trends, ranks priorities, proposes a plan, creates explainable recommendations, and stores compact summaries in per-user device memory.
+Owj AI v0.2 is a deterministic, provider-independent JavaScript intelligence engine that runs inside Owj. It does not call a hosted LLM. The app explicitly passes profile, session, plan and exam records; the engine validates and normalizes them before analysis.
 
-## Flow
+## Analysis pipeline
 
-1. Validate explicit Owj data.
-2. Aggregate total and weekly study time by subject.
-3. Detect preferred study hours, consistency, completion and subject imbalance.
-4. Compare current and previous periods and stored snapshots.
-5. Rank upcoming exams and low-coverage subjects.
-6. Propose a workload-aware plan; never silently overwrite user plans.
-7. Persist summaries and selected insights locally.
+1. Normalize dates, durations, statuses and subject names; exclude future sessions and safely ignore malformed records.
+2. Aggregate total, recent-week and previous-week study activity, completion, and planned-versus-actual time.
+3. Include profile subjects with no recorded sessions so missing data is visible rather than silently omitted.
+4. Detect study-hour and weekday patterns, active-day consistency, subject concentration and repeated abandoned plans.
+5. Estimate trends using distinct weekly memory snapshots when enough history exists; otherwise use a clearly marked low-confidence week-over-week comparison or return insufficient history.
+6. Rank exams using urgency and a transparent preparation estimate; rank subjects using missing activity, recency and distribution.
+7. Allocate a proposed daily workload by priority and completion history. The sum of proposed blocks is bounded by the recommended capacity.
+8. Store compact weekly snapshots, subject aggregates and selected insights in per-user memory.
 
-Run analysis after meaningful events (session completion, plan/exam changes, or user-requested review), not every render or network status change. Internet can be used for optional Supabase sync; analysis itself runs locally.
+## Reliability
 
-## Memory
+The engine distinguishes data volume from certainty. Forecasts expose their method and confidence, and recommendations include reasons. Study minutes are behavioral signals, not direct measures of learning or mastery; Owj should not present them as exam-score predictions.
 
-Memory is keyed by authenticated user ID and stores aggregate snapshots, subject summaries and selected patterns—not full raw session history. Browser localStorage is the starter adapter; Capacitor Preferences or encrypted storage can replace it.
+## Triggering and connectivity
+
+Run analysis after meaningful events (session completion, plan/exam changes, or a user-requested review), not on every render. The engine itself works locally and does not require internet. If product behavior requires analysis to be triggered only while connected, the Owj app should gate the call at its event/sync layer; it should not send private study records to a server merely to calculate local statistics. Supabase can be used separately for explicitly enabled sync.
+
+## Memory and privacy
+
+Memory is keyed by authenticated user ID and stores aggregate snapshots, subject summaries and selected patterns—not full raw session history. Browser localStorage is the starter adapter; Capacitor Preferences or encrypted storage can replace it. Clear memory on sign-out when the product's account-isolation policy requires it.
 
 ## Limits
 
-This is an adaptive rules-and-statistics engine, not a trained neural network or general-purpose conversational model. It learns user-specific patterns by updating structured memory; it does not change model weights. Confidence depends on data volume and quality.
+This is an adaptive rules-and-statistics engine, not a trained neural network or general-purpose conversational model. It learns user-specific patterns by updating structured memory; it does not change model weights. More history improves pattern estimates but does not make study time equivalent to mastery. The engine currently focuses on study analytics and planning, not unrestricted textbook question answering.
