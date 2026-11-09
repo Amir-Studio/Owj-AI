@@ -1,6 +1,6 @@
 # Architecture
 
-Owj AI v0.9.1 combines a deterministic, provider-independent JavaScript intelligence engine that runs inside Owj. It does not call a hosted LLM. The app explicitly passes profile, session, plan and exam records; the engine validates and normalizes them before analysis.
+Owj AI v0.9.5 combines a deterministic, provider-independent JavaScript intelligence engine that runs inside Owj. It does not call a hosted LLM. The app explicitly passes profile, session, plan and exam records; the engine validates and normalizes them before analysis.
 
 ## Analysis pipeline
 
